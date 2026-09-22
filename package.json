@@ -1,0 +1,38 @@
+{
+  "name": "mcp-lab",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "apps/*",
+    "servers/*"
+  ],
+  "engines": {
+    "node": "24.x"
+  },
+  "scripts": {
+    "dev": "npm run dev --workspace @mcp-lab/host --",
+    "start": "npm run start --workspace @mcp-lab/host --",
+    "build": "node tooling/build.ts",
+    "typecheck": "tsc --noEmit",
+    "lint": "biome check .",
+    "lint:fix": "biome check --write .",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "check:deps": "node tooling/dependencies.ts",
+    "check:structure": "node tooling/structure.ts",
+    "docs:generate": "node tooling/docs.ts --write",
+    "docs:check": "node tooling/docs.ts",
+    "check": "npm run lint && npm run typecheck && npm run check:deps && npm run check:structure && npm run docs:check && npm run test:coverage && npm run build",
+    "hooks:install": "git config core.hooksPath .githooks"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.5.12",
+    "@types/node": "24.13.3",
+    "@vitest/coverage-v8": "5.0.0",
+    "dependency-cruiser": "18.4.0",
+    "typescript": "5.9.3",
+    "vitest": "5.0.0"
+  }
+}

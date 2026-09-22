@@ -1,0 +1,3 @@
+llm.model: deepseek-flash
+llm.timeoutMs: 30000
+llm.maxOutputTokens: 1024
