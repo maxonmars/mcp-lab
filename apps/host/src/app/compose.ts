@@ -1,18 +1,28 @@
 import { readFileSync } from "node:fs";
-import { InputError, runCli, type Terminal } from "../adapters/cli/index.ts";
+import { resolve } from "node:path";
+import { CliView, InputError, runCli, type Terminal } from "../adapters/cli/index.ts";
 import { DeepSeekModel, type DeepSeekOptions } from "../adapters/llm/index.ts";
 import { Agent, type ModelPort } from "../core/index.ts";
+import {
+  discoverFilesystemTools,
+  type FilesystemDiscoveryOptions,
+  type McpDiscoveryResult,
+} from "../features/mcp/index.ts";
 import { createCommands } from "./commands.ts";
-import { parseOptions, resolveConfig, showConfig } from "./config.ts";
+import { parseOptions, type ResolvedConfig, resolveConfig, showConfig } from "./config.ts";
 
 export async function run(options: {
   argv: readonly string[];
   env: Readonly<Record<string, string | undefined>>;
   cwd: string;
+  nodeExecutable: string;
   terminal: Terminal;
   createModel?: (options: DeepSeekOptions) => ModelPort;
+  discoverFilesystemTools?: (options: FilesystemDiscoveryOptions) => Promise<McpDiscoveryResult>;
 }): Promise<number> {
   let agent: Agent | undefined;
+  let config: ResolvedConfig;
+  const view = new CliView(options.terminal.output, options.terminal.error);
   const commands = createCommands({
     ask: (text) => {
       if (!agent) {
@@ -29,14 +39,27 @@ export async function run(options: {
       return agent.respond(text);
     },
     config: () => showConfig(config),
-    print: (text) => {
-      options.terminal.output.write(`${text}\n`);
+    mcpTools: async () => {
+      const discover = options.discoverFilesystemTools ?? discoverFilesystemTools;
+      return discover({
+        root: resolve(options.cwd, config.values["mcp.filesystemRoot"]),
+        timeoutMs: config.values["mcp.timeoutMs"],
+        nodeExecutable: options.nodeExecutable,
+      });
     },
+    view,
   });
-  const { command, flags } = parseOptions(
-    options.argv,
-    commands.flatMap((item) => item.aliases ?? []),
-  );
-  const config = resolveConfig(flags, options.env, options.cwd);
-  return runCli(commands, command, options.terminal);
+  let command: string[];
+  try {
+    const parsed = parseOptions(
+      options.argv,
+      commands.flatMap((item) => item.aliases ?? []),
+    );
+    command = parsed.command;
+    config = resolveConfig(parsed.flags, options.env, options.cwd);
+  } catch (error) {
+    view.error(error);
+    return 1;
+  }
+  return runCli(commands, command, options.terminal, view);
 }

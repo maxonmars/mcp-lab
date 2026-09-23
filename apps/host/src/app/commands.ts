@@ -1,4 +1,5 @@
-import { type Command, commandHelp } from "../adapters/cli/index.ts";
+import type { Command, CommandView, ConfigRow } from "../adapters/cli/index.ts";
+import type { McpDiscoveryResult } from "../features/mcp/index.ts";
 import { sections } from "./markdown.ts";
 import { settingEntries } from "./settings.ts";
 
@@ -6,8 +7,9 @@ const descriptions = sections(new URL("./commands.md", import.meta.url));
 
 export function createCommands(context: {
   ask: (text: string) => Promise<string>;
-  config: () => string;
-  print: (text: string) => void;
+  config: () => readonly ConfigRow[];
+  mcpTools: () => Promise<McpDiscoveryResult>;
+  view: CommandView;
 }): readonly Command[] {
   const commands: Command[] = [
     {
@@ -15,7 +17,7 @@ export function createCommands(context: {
       arguments: ["<текст...>"],
       description: descriptions.ask ?? "",
       run: async (args) => {
-        context.print(await context.ask(args.join(" ")));
+        context.view.answer(await context.ask(args.join(" ")));
         return "continue";
       },
     },
@@ -25,12 +27,9 @@ export function createCommands(context: {
       aliases: ["--help", "-h"],
       description: descriptions.help ?? "",
       run: async () => {
-        context.print(commandHelp(commands));
-        context.print(
-          settingEntries
-            .filter((entry) => !entry.secret)
-            .map((entry) => `${entry.flag} <${entry.type}> — ${entry.description}`)
-            .join("\n"),
+        context.view.help(
+          commands,
+          settingEntries.filter((entry) => !entry.secret),
         );
         return "continue";
       },
@@ -40,7 +39,16 @@ export function createCommands(context: {
       arguments: [],
       description: descriptions["config show"] ?? "",
       run: async () => {
-        context.print(context.config());
+        context.view.config(context.config());
+        return "continue";
+      },
+    },
+    {
+      name: "mcp tools",
+      arguments: [],
+      description: descriptions["mcp tools"] ?? "",
+      run: async () => {
+        context.view.mcpTools(await context.mcpTools());
         return "continue";
       },
     },

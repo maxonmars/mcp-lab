@@ -7,10 +7,12 @@
     ".": "./dist/index.js"
   },
   "scripts": {
-    "dev": "node src/app/main.ts",
-    "start": "node dist/app/main.js"
+    "dev": "node --env-file-if-exists=../../.env src/app/main.ts",
+    "start": "node --env-file-if-exists=../../.env dist/app/main.js"
   },
   "dependencies": {
+    "@modelcontextprotocol/client": "2.0.0",
+    "@modelcontextprotocol/server-filesystem": "2026.8.31",
     "openai": "7.10.0",
     "yaml": "2.9.0",
     "zod": "4.5.4"

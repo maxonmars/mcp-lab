@@ -1,6 +1,7 @@
 # MCP-серверы
 
-Зарезервировано для будущих заданий. Серверов и зависимости MCP SDK сейчас нет.
+Зарезервировано для будущих заданий. Собственных серверных workspaces пока нет; host использует
+внешний пакет Filesystem MCP только как дочерний процесс discovery.
 
 Каждый реализованный сервер станет отдельным npm workspace с package.json, README.md,
 AGENTS.md, CLAUDE.md, src/index.ts, src/app/main.ts, tsconfig.build.json и собственными тестами.

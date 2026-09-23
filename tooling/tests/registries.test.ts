@@ -18,7 +18,12 @@ it("настройки имеют уникальные ключи и произ�
 });
 
 it("команды имеют уникальные имена и алиасы, описания, аргументы и обработчики", () => {
-  const commands = createCommands({ ask: async () => "", config: () => "", print: () => {} });
+  const commands = createCommands({
+    ask: async () => "",
+    config: () => [],
+    mcpTools: async () => ({ server: { name: "", version: "" }, tools: [] }),
+    view: { answer: () => {}, help: () => {}, config: () => {}, mcpTools: () => {} },
+  });
   const names = commands.flatMap((command) => [command.name, ...(command.aliases ?? [])]);
   expect(new Set(names).size).toBe(names.length);
   for (const command of commands) {

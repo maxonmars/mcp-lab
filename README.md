@@ -1,7 +1,7 @@
 # mcp-lab
 
-Минимальный CLI-агент на TypeScript и Node 24. Репозиторий предназначен для будущих учебных заданий по MCP.
-Сейчас агент отправляет системную инструкцию и текущую реплику в DeepSeek. Между репликами история не сохраняется.
+Учебный host на TypeScript и Node 24: простой CLI-агент и первое подключение к локальному Filesystem MCP.
+Агент отправляет системную инструкцию и текущую реплику в DeepSeek; между репликами история не сохраняется.
 
 ## Запуск
 
@@ -9,8 +9,14 @@
 nvm use
 npm ci
 npm run hooks:install
-export LAB_LLM_API_KEY='ваш-ключ'
+cp .env.example .env
 npm run dev
+```
+
+Укажите ключ в корневом `.env`:
+
+```dotenv
+LAB_LLM_API_KEY=ваш-ключ
 ```
 
 В REPL обычная строка отправляется агенту. `/help` показывает команды, `/exit` завершает ввод.
@@ -21,10 +27,13 @@ npm run dev
 npm run dev -- ask "Что такое MCP? Ответь кратко."
 npm run dev -- help
 npm run dev -- config show
+npm run dev -- mcp tools
 ```
 
-Справка и просмотр настроек работают без ключа и не обращаются к API.
-`.env` автоматически не читается; ключ передаётся окружением. Значение секрета не выводится в config show.
+Справка, просмотр настроек и `mcp tools` работают без ключа. Последняя команда получает список от
+настоящего локального сервера, но не вызывает инструменты и не обращается к модели.
+`npm run dev` и `npm start` читают корневой `.env`, если он существует. Переменная, переданная
+окружением процесса, имеет приоритет. Значение секрета не выводится в config show.
 
 ## Настройки
 
@@ -35,6 +44,7 @@ npm run dev -- config show
 
 ```sh
 npm run dev -- --llm-max-output-tokens 256 ask "Объясни stdio одним предложением."
+npm run dev -- --mcp-filesystem-root /абсолютный/путь mcp tools
 ```
 
 Полные [настройки](docs/configuration.md) и [команды](docs/commands.md) генерируются из реестров.
@@ -58,6 +68,7 @@ Pre-commit запускает ту же проверку; GitHub Actions про�
 npm run build
 npm start -- help
 npm start -- ask "Что делает host?"
+npm start -- mcp tools
 ```
 
 Сборка переписывает относительные `.ts`-импорты в `.js`, копирует Markdown и проверяет запуск из другого каталога.
@@ -67,6 +78,8 @@ npm start -- ask "Что делает host?"
 - [Архитектура и правила развития](ARCHITECTURE.md)
 - [Инструкции для агентов-кодеров](AGENTS.md)
 - [Начальное решение](docs/adr/0001-repository-foundation.md)
+- [Первое подключение MCP](docs/adr/0002-filesystem-mcp-discovery.md)
 - [Host](apps/host/README.md)
 - [Короткое демо](docs/demos/first-start.md)
+- [Демо списка MCP-инструментов](docs/demos/mcp-tools.md)
 - [Направления курса](docs/course.md) — будущие задания, без реализации в текущем старте
