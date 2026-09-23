@@ -1,4 +1,4 @@
-import { describeError } from "../adapters/cli/index.ts";
+import { CliView } from "../adapters/cli/index.ts";
 import { run } from "./compose.ts";
 
 try {
@@ -6,6 +6,7 @@ try {
     argv: process.argv.slice(2),
     env: process.env,
     cwd: process.env.INIT_CWD ?? process.cwd(),
+    nodeExecutable: process.execPath,
     terminal: {
       input: process.stdin,
       output: process.stdout,
@@ -14,6 +15,6 @@ try {
     },
   });
 } catch (error) {
-  process.stderr.write(`Ошибка: ${describeError(error)}\n`);
+  new CliView(process.stdout, process.stderr).error(error);
   process.exitCode = 1;
 }

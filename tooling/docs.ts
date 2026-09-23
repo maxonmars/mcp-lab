@@ -8,7 +8,12 @@ export function generatedDocs(): Record<string, string> {
   const settings = settingEntries.map((entry) => {
     return `| ${entry.key} | ${entry.type} | ${entry.secret ? "—" : cell(entry.default)} | ${entry.env} | ${entry.secret ? "—" : entry.flag} | ${cell(entry.description)} |`;
   });
-  const registry = createCommands({ ask: async () => "", config: () => "", print: () => {} });
+  const registry = createCommands({
+    ask: async () => "",
+    config: () => [],
+    mcpTools: async () => ({ server: { name: "", version: "" }, tools: [] }),
+    view: { answer: () => {}, help: () => {}, config: () => {}, mcpTools: () => {} },
+  });
   const commands = registry.map(
     (command) =>
       `| ${[command.name, ...command.arguments].join(" ")} | /${command.name} | ${cell(command.description)} |`,
@@ -21,7 +26,7 @@ export function generatedDocs(): Record<string, string> {
       "",
       "Приоритет: defaults < YAML-файл < env < CLI. Любой некорректный заданный источник отклоняется.",
       "YAML содержит плоские ключи с точками. Секреты разрешены только в env; config.file недоступен внутри YAML.",
-      "`.env` автоматически не загружается. config show показывает источник каждого значения.",
+      "`npm run dev` и `npm start` читают корневой `.env`, если он существует. Значения из окружения процесса имеют приоритет; config show показывает источник каждого значения.",
       "",
       "| Ключ | Тип | Default | Env | Флаг | Описание |",
       "|---|---|---|---|---|---|",

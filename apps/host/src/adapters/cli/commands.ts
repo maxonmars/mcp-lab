@@ -8,12 +8,6 @@ export type Command = Readonly<{
   run: (args: readonly string[]) => Promise<"continue" | "exit">;
 }>;
 
-export function commandHelp(commands: readonly Command[]): string {
-  return commands
-    .map((command) => `${[command.name, ...command.arguments].join(" ")} — ${command.description}`)
-    .join("\n");
-}
-
 export function dispatch(commands: readonly Command[], argv: readonly string[]): Promise<"continue" | "exit"> {
   const command = commands.find((item) => {
     const words = item.name.split(" ");

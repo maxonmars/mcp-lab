@@ -1,3 +1,5 @@
 llm.model: deepseek-flash
 llm.timeoutMs: 30000
 llm.maxOutputTokens: 1024
+mcp.filesystemRoot: docs/demos/fixtures/filesystem
+mcp.timeoutMs: 10000

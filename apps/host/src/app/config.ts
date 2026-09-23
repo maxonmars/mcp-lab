@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { parse } from "yaml";
-import { InputError } from "../adapters/cli/index.ts";
+import { type ConfigRow, InputError } from "../adapters/cli/index.ts";
 import { type SettingKey, settingEntries, settings, type Values } from "./settings.ts";
 
 type Source = "default" | "file" | "env" | "cli";
@@ -92,11 +92,10 @@ export function resolveConfig(
   return { values: values as Values, sources: sources as Record<SettingKey, Source> };
 }
 
-export function showConfig(config: ResolvedConfig): string {
-  return settingEntries
-    .map((entry) => {
-      const value = entry.secret ? (config.values[entry.key] ? "[задано]" : "[не задано]") : config.values[entry.key];
-      return `${entry.key}: ${value} (${config.sources[entry.key]})`;
-    })
-    .join("\n");
+export function showConfig(config: ResolvedConfig): ConfigRow[] {
+  return settingEntries.map((entry) => ({
+    key: entry.key,
+    value: entry.secret ? (config.values[entry.key] ? "[задано]" : "[не задано]") : String(config.values[entry.key]),
+    source: config.sources[entry.key],
+  }));
 }

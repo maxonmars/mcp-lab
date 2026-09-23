@@ -27,6 +27,16 @@ try {
       stdio: "pipe",
     });
   }
+  const filesystemRoot = join(temporary, "filesystem");
+  mkdirSync(filesystemRoot);
+  const output = execFileSync(
+    process.execPath,
+    [join(root, "apps/host/dist/app/main.js"), "--mcp-filesystem-root", filesystemRoot, "mcp", "tools"],
+    { cwd: temporary, encoding: "utf8", env: {}, stdio: "pipe" },
+  );
+  for (const name of ["read_text_file", "list_directory", "write_file"]) {
+    if (!output.includes(name)) throw new Error(`В собранном выводе отсутствует ${name}.`);
+  }
   console.log("Сборка и запуск CLI из другого каталога: OK.");
 } finally {
   rmSync(temporary, { recursive: true, force: true });

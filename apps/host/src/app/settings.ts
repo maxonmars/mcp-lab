@@ -10,6 +10,12 @@ export const settings = {
   "llm.timeoutMs": { schema: positiveInteger, default: 30000, type: "number" },
   "llm.maxOutputTokens": { schema: positiveInteger, default: 1024, type: "number" },
   "llm.apiKey": { schema: z.string().trim().min(1).nullable(), default: null, type: "string", secret: true },
+  "mcp.filesystemRoot": {
+    schema: z.string().trim().min(1),
+    default: "docs/demos/fixtures/filesystem",
+    type: "string",
+  },
+  "mcp.timeoutMs": { schema: positiveInteger, default: 10000, type: "number" },
 } as const;
 
 export type SettingKey = keyof typeof settings;
