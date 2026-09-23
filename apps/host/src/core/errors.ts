@@ -1,4 +1,12 @@
-export type AgentErrorCode = "EMPTY_INPUT" | "EMPTY_RESPONSE" | "MODEL_FAILURE" | "INCOMPLETE_RESPONSE";
+export type AgentErrorCode =
+  | "EMPTY_INPUT"
+  | "EMPTY_RESPONSE"
+  | "MODEL_FAILURE"
+  | "INCOMPLETE_RESPONSE"
+  | "INVALID_TOOL_CALL_COUNT"
+  | "UNKNOWN_TOOL_CALL"
+  | "INVALID_TOOL_ARGUMENTS"
+  | "TOOL_CALL_LIMIT_EXCEEDED";
 
 export class AgentError extends Error {
   readonly code: AgentErrorCode;

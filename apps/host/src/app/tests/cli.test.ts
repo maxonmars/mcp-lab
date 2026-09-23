@@ -4,11 +4,13 @@ import { join } from "node:path";
 import { Readable, Writable } from "node:stream";
 import { stripVTControlCharacters } from "node:util";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { Message } from "../../core/index.ts";
+import type { ModelCompletion, ModelRequest, ToolSource } from "../../core/index.ts";
 import {
   type FilesystemDiscoveryOptions,
   McpDiscoveryError,
   type McpDiscoveryResult,
+  McpToolSourceError,
+  type StdioToolSourceOptions,
 } from "../../features/mcp/index.ts";
 import { run } from "../compose.ts";
 
@@ -21,28 +23,56 @@ afterEach(() => {
   rmSync(root, { recursive: true, force: true });
 });
 
-async function invoke(
-  argv: string[],
-  input = "",
-  authenticated = true,
-  discoverFilesystemTools?: (options: FilesystemDiscoveryOptions) => Promise<McpDiscoveryResult>,
-  terminal: { interactive?: boolean; color?: boolean } = {},
-) {
+function defaultComplete(request: ModelRequest): Promise<ModelCompletion> {
+  return Promise.resolve({ type: "text", content: `Ответ: ${request.messages.at(-1)?.content}` });
+}
+
+const emptyToolSource: ToolSource = {
+  listTools: async () => [],
+  callTool: async () => {
+    throw new Error("callTool не должен вызываться без объявленных инструментов");
+  },
+};
+
+async function defaultWithWeatherToolSource(
+  _options: StdioToolSourceOptions,
+  use: (source: ToolSource) => Promise<string>,
+): Promise<string> {
+  return use(emptyToolSource);
+}
+
+type CompleteMock = ReturnType<typeof vi.fn<(request: ModelRequest) => Promise<ModelCompletion>>>;
+type WeatherToolSourceFn = (
+  options: StdioToolSourceOptions,
+  use: (source: ToolSource) => Promise<string>,
+) => Promise<string>;
+
+type InvokeOptions = Readonly<{
+  input?: string;
+  authenticated?: boolean;
+  discoverFilesystemTools?: (options: FilesystemDiscoveryOptions) => Promise<McpDiscoveryResult>;
+  terminal?: { interactive?: boolean; color?: boolean };
+  complete?: CompleteMock;
+  withWeatherToolSource?: WeatherToolSourceFn;
+}>;
+
+async function invoke(argv: string[], opts: InvokeOptions = {}) {
   let output = "";
   let error = "";
-  const complete = vi.fn(async (messages: readonly Message[]) => `Ответ: ${messages.at(-1)?.content}`);
+  const complete = opts.complete ?? vi.fn(defaultComplete);
   const createModel = vi.fn(() => ({ complete }));
-  const tty = terminal.color ? { isTTY: true, getColorDepth: () => 8 } : {};
+  const tty = opts.terminal?.color ? { isTTY: true, getColorDepth: () => 8 } : {};
   const code = await run({
     argv,
     cwd: root,
-    env: authenticated ? { LAB_LLM_API_KEY: "test-key" } : {},
+    env: opts.authenticated === false ? {} : { LAB_LLM_API_KEY: "test-key" },
     nodeExecutable: "node",
     createModel,
-    discoverFilesystemTools,
+    discoverFilesystemTools: opts.discoverFilesystemTools,
+    withWeatherToolSource: opts.withWeatherToolSource ?? defaultWithWeatherToolSource,
     terminal: {
-      input: Readable.from([input]),
-      interactive: terminal.interactive ?? false,
+      input: Readable.from([opts.input ?? ""]),
+      interactive: opts.terminal?.interactive ?? false,
       output: Object.assign(
         new Writable({
           write(chunk, _encoding, done) {
@@ -69,46 +99,73 @@ async function invoke(
 describe("CLI и REPL", () => {
   it("одинаково обрабатывают ask и /ask", async () => {
     const cli = await invoke(["ask", "Вопрос с пробелами"]);
-    const repl = await invoke([], "/ask Вопрос с пробелами\n/exit\n");
+    const repl = await invoke([], { input: "/ask Вопрос с пробелами\n/exit\n" });
     expect(cli.code).toBe(0);
     expect(repl.output).toBe(cli.output);
     expect(repl.complete.mock.calls).toEqual(cli.complete.mock.calls);
-    expect(cli.complete.mock.calls[0]?.[0]?.[0]?.content).toContain("полезный собеседник");
+    const firstRequest = cli.complete.mock.calls[0]?.[0] as ModelRequest;
+    expect(firstRequest.messages[0]?.content).toContain("полезный собеседник");
+    expect(firstRequest.tools).toEqual([]);
+    expect(firstRequest.toolChoice).toBe("none");
   });
 
-  it("справка и config show доступны без API-ключа и без создания модели", async () => {
+  it("справка и config show доступны без API-ключа, модели и weather MCP", async () => {
     const discovery = vi.fn(async () => ({ server: { name: "filesystem", version: "1" }, tools: [] }));
-    const help = await invoke(["--help"], "", false, discovery);
-    const config = await invoke(["config", "show"], "", false, discovery);
+    const weatherSpy = vi.fn(defaultWithWeatherToolSource);
+    const help = await invoke(["--help"], {
+      authenticated: false,
+      discoverFilesystemTools: discovery,
+      withWeatherToolSource: weatherSpy,
+    });
+    const config = await invoke(["config", "show"], {
+      authenticated: false,
+      discoverFilesystemTools: discovery,
+      withWeatherToolSource: weatherSpy,
+    });
     expect(help.output).toContain("--llm-model");
     expect(config.output).toContain("[не задано]");
     expect(help.createModel).not.toHaveBeenCalled();
     expect(config.createModel).not.toHaveBeenCalled();
     expect(discovery).not.toHaveBeenCalled();
+    expect(weatherSpy).not.toHaveBeenCalled();
   });
 
-  it("одинаково показывает инструменты через CLI и REPL без создания модели", async () => {
+  it("одинаково показывает инструменты Filesystem через CLI и REPL без модели и weather MCP", async () => {
     const response: McpDiscoveryResult = {
       server: { name: "filesystem", version: "1.0.0" },
       tools: [{ name: "zeta", description: "вторая строка\nописания" }, { name: "alpha" }],
     };
     const cliDiscovery = vi.fn(async () => response);
     const replDiscovery = vi.fn(async () => response);
-    const cli = await invoke(["mcp", "tools"], "", false, cliDiscovery);
-    const repl = await invoke([], "/mcp tools\n/exit\n", false, replDiscovery);
+    const weatherSpy = vi.fn(defaultWithWeatherToolSource);
+    const cli = await invoke(["mcp", "tools"], {
+      authenticated: false,
+      discoverFilesystemTools: cliDiscovery,
+      withWeatherToolSource: weatherSpy,
+    });
+    const repl = await invoke([], {
+      input: "/mcp tools\n/exit\n",
+      authenticated: false,
+      discoverFilesystemTools: replDiscovery,
+      withWeatherToolSource: weatherSpy,
+    });
     expect(repl.output).toBe(cli.output);
     expect(cli.output).toBe(
       "\n── MCP · filesystem · 1.0.0 ──\n\nИнструментов: 2\n\n1. alpha\n\n2. zeta\n   вторая строка описания\n",
     );
-    expect(response.tools[0]?.description).toBe("вторая строка\nописания");
     expect(cli.createModel).not.toHaveBeenCalled();
     expect(cliDiscovery).toHaveBeenCalledOnce();
     expect(replDiscovery).toHaveBeenCalledOnce();
+    expect(weatherSpy).not.toHaveBeenCalled();
   });
 
   it("создаёт новое discovery при каждом вызове команды в REPL", async () => {
     const discovery = vi.fn(async () => ({ server: { name: "filesystem", version: "1" }, tools: [] }));
-    const result = await invoke([], "/mcp tools\n/mcp tools\n/exit\n", false, discovery);
+    const result = await invoke([], {
+      input: "/mcp tools\n/mcp tools\n/exit\n",
+      authenticated: false,
+      discoverFilesystemTools: discovery,
+    });
     expect(result.code).toBe(0);
     expect(discovery).toHaveBeenCalledTimes(2);
     expect(result.createModel).not.toHaveBeenCalled();
@@ -119,7 +176,11 @@ describe("CLI и REPL", () => {
       .fn()
       .mockRejectedValueOnce(new McpDiscoveryError("ROOT_NOT_FOUND"))
       .mockResolvedValueOnce({ server: { name: "filesystem", version: "1" }, tools: [] });
-    const result = await invoke([], "/mcp tools\n/mcp tools\n/exit\n", false, discovery);
+    const result = await invoke([], {
+      input: "/mcp tools\n/mcp tools\n/exit\n",
+      authenticated: false,
+      discoverFilesystemTools: discovery,
+    });
     expect(result.code).toBe(1);
     expect(result.error).toContain("Учебная папка MCP не существует");
     expect(result.output).toContain("Инструментов: 0");
@@ -127,18 +188,20 @@ describe("CLI и REPL", () => {
   });
 
   it("продолжает REPL после неизвестной команды и останавливается на /exit", async () => {
-    const result = await invoke([], "/unknown\nВопрос\n/exit\nПосле выхода\n");
+    const result = await invoke([], { input: "/unknown\nВопрос\n/exit\nПосле выхода\n" });
     expect(result.code).toBe(1);
     expect(result.error).toContain("Неизвестная команда");
     expect(result.output).toBe("\n── Ответ агента ──\n\nОтвет: Вопрос\n");
     expect(result.complete).toHaveBeenCalledTimes(1);
   });
 
-  it("при отсутствии ключа возвращает ошибку и не вызывает модель", async () => {
-    const result = await invoke(["ask", "Тест"], "", false);
+  it("при отсутствии ключа возвращает ошибку, не вызывает модель и не запускает weather MCP", async () => {
+    const weatherSpy = vi.fn(defaultWithWeatherToolSource);
+    const result = await invoke(["ask", "Тест"], { authenticated: false, withWeatherToolSource: weatherSpy });
     expect(result.code).toBe(1);
     expect(result.error).toContain("LAB_LLM_API_KEY");
     expect(result.createModel).not.toHaveBeenCalled();
+    expect(weatherSpy).not.toHaveBeenCalled();
   });
 
   it("отклоняет лишние и отсутствующие аргументы команд", async () => {
@@ -148,7 +211,7 @@ describe("CLI и REPL", () => {
   });
 
   it("интерактивный REPL показывает заголовок один раз и приглашение перед каждым вводом", async () => {
-    const result = await invoke([], "Вопрос\n/exit\n", true, undefined, { interactive: true });
+    const result = await invoke([], { input: "Вопрос\n/exit\n", terminal: { interactive: true } });
     expect(result.output.match(/── mcp-lab ──/g)).toHaveLength(1);
     expect(result.output).toContain("/ask · /help · /config show · /mcp tools · /exit");
     expect(result.output.match(/mcp-lab > /g)).toHaveLength(2);
@@ -156,7 +219,7 @@ describe("CLI и REPL", () => {
   });
 
   it("при pipe-вводе не печатает заголовок и приглашение", async () => {
-    const result = await invoke([], "/config show\n/exit\n");
+    const result = await invoke([], { input: "/config show\n/exit\n" });
     expect(result.output).not.toContain("mcp-lab");
     expect(result.output.startsWith("\n── Настройки ──")).toBe(true);
   });
@@ -188,13 +251,114 @@ describe("CLI и REPL", () => {
   it("цвет не попадает в данные Agent и MCP", async () => {
     const response: McpDiscoveryResult = { server: { name: "filesystem", version: "1" }, tools: [{ name: "read" }] };
     const discovery = vi.fn(async () => structuredClone(response));
-    const plain = await invoke([], "Вопрос\n/mcp tools\n/exit\n", true, discovery);
-    const colored = await invoke([], "Вопрос\n/mcp tools\n/boom\n", true, discovery, { color: true });
+    const plain = await invoke([], { input: "Вопрос\n/mcp tools\n/exit\n", discoverFilesystemTools: discovery });
+    const colored = await invoke([], {
+      input: "Вопрос\n/mcp tools\n/boom\n",
+      discoverFilesystemTools: discovery,
+      terminal: { color: true },
+    });
     expect(colored.output).toContain("\u001b[");
     expect(colored.error).toContain("\u001b[");
     expect(stripVTControlCharacters(colored.output)).toBe(plain.output);
     expect(colored.complete.mock.calls).toEqual(plain.complete.mock.calls);
-    expect(colored.complete.mock.calls[0]?.[0]?.at(-1)?.content).toBe("Вопрос");
+    const firstRequest = colored.complete.mock.calls[0]?.[0] as ModelRequest;
+    expect(firstRequest.messages.at(-1)?.content).toBe("Вопрос");
     expect(await discovery.mock.results[1]?.value).toEqual(response);
+  });
+});
+
+describe("ask и Open-Meteo MCP tool calling", () => {
+  const weatherTool = {
+    name: "get_current_weather",
+    description: "Текущая погода.",
+    inputSchema: { type: "object", properties: { location: { type: "string" } } },
+  };
+
+  it("выполняет полный fake tool flow и печатает статус «выполнено» перед ответом", async () => {
+    const callTool = vi.fn(async () => ({ content: "Ясно, 12°C", isError: false }));
+    const toolSource: ToolSource = { listTools: async () => [weatherTool], callTool };
+    const sessions: string[] = [];
+    const withWeatherToolSource = vi.fn(
+      async (_options: StdioToolSourceOptions, use: (source: ToolSource) => Promise<string>) => {
+        sessions.push("open");
+        try {
+          return await use(toolSource);
+        } finally {
+          sessions.push("close");
+        }
+      },
+    );
+    const complete: CompleteMock = vi
+      .fn<(request: ModelRequest) => Promise<ModelCompletion>>()
+      .mockResolvedValueOnce({
+        type: "tool_calls",
+        calls: [{ id: "call-1", name: "get_current_weather", arguments: { location: "Новосибирск" } }],
+      })
+      .mockResolvedValueOnce({ type: "text", content: "В Новосибирске ясно, 12°C." });
+    const result = await invoke(["ask", "Какая погода в Новосибирске?"], { complete, withWeatherToolSource });
+    expect(result.code).toBe(0);
+    expect(callTool).toHaveBeenCalledWith({ name: "get_current_weather", arguments: { location: "Новосибирск" } });
+    expect(withWeatherToolSource).toHaveBeenCalledOnce();
+    expect(sessions).toEqual(["open", "close"]);
+    const statusIndex = result.output.indexOf("MCP: get_current_weather — выполнено");
+    const answerIndex = result.output.indexOf("В Новосибирске ясно, 12°C.");
+    expect(statusIndex).toBeGreaterThanOrEqual(0);
+    expect(statusIndex).toBeLessThan(answerIndex);
+  });
+
+  it("tool isError печатает статус «ошибка» перед объяснением модели", async () => {
+    const toolSource: ToolSource = {
+      listTools: async () => [weatherTool],
+      callTool: async () => ({ content: "Место не найдено.", isError: true }),
+    };
+    const withWeatherToolSource = (_options: StdioToolSourceOptions, use: (source: ToolSource) => Promise<string>) =>
+      use(toolSource);
+    const complete: CompleteMock = vi
+      .fn<(request: ModelRequest) => Promise<ModelCompletion>>()
+      .mockResolvedValueOnce({
+        type: "tool_calls",
+        calls: [{ id: "call-1", name: "get_current_weather", arguments: { location: "Незнакогород" } }],
+      })
+      .mockResolvedValueOnce({ type: "text", content: "Не удалось получить данные о погоде." });
+    const result = await invoke(["ask", "Погода в Незнакогороде?"], { complete, withWeatherToolSource });
+    const statusIndex = result.output.indexOf("MCP: get_current_weather — ошибка");
+    const answerIndex = result.output.indexOf("Не удалось получить данные о погоде.");
+    expect(statusIndex).toBeGreaterThanOrEqual(0);
+    expect(statusIndex).toBeLessThan(answerIndex);
+  });
+
+  it("прямой ответ модели без tool call не печатает статус MCP", async () => {
+    const result = await invoke(["ask", "Просто вопрос"]);
+    expect(result.output).not.toContain("MCP:");
+  });
+
+  it("каждая реплика REPL создаёт и закрывает отдельную weather MCP-сессию", async () => {
+    const sessions: string[] = [];
+    const withWeatherToolSource = vi.fn(
+      async (_options: StdioToolSourceOptions, use: (source: ToolSource) => Promise<string>) => {
+        sessions.push("open");
+        try {
+          return await use(emptyToolSource);
+        } finally {
+          sessions.push("close");
+        }
+      },
+    );
+    const result = await invoke([], { input: "Первый\nВторой\n/exit\n", withWeatherToolSource });
+    expect(result.code).toBe(0);
+    expect(withWeatherToolSource).toHaveBeenCalledTimes(2);
+    expect(sessions).toEqual(["open", "close", "open", "close"]);
+  });
+
+  it("REPL продолжает работу после ошибки weather MCP-сессии", async () => {
+    const withWeatherToolSource = vi
+      .fn<WeatherToolSourceFn>()
+      .mockRejectedValueOnce(new McpToolSourceError("CONNECT_FAILED"))
+      .mockImplementationOnce(defaultWithWeatherToolSource);
+    const result = await invoke([], { input: "Первый\nВторой\n/exit\n", withWeatherToolSource });
+    expect(result.code).toBe(1);
+    expect(result.error).toContain("MCP-сервером погоды");
+    expect(result.output).toContain("Ответ: Второй");
+    expect(withWeatherToolSource).toHaveBeenCalledTimes(2);
   });
 });

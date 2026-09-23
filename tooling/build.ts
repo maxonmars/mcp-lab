@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { files, localPath, workspacePaths } from "./files.ts";
 
+const WEATHER_SMOKE_TIMEOUT_MS = 5_000;
 const root = resolve(".");
 for (const workspace of workspacePaths(root)) {
   rmSync(join(workspace, "dist"), { recursive: true, force: true });
@@ -40,4 +41,19 @@ try {
   console.log("Сборка и запуск CLI из другого каталога: OK.");
 } finally {
   rmSync(temporary, { recursive: true, force: true });
+}
+
+const weatherTemporary = mkdtempSync(join(tmpdir(), "mcp-lab-build-weather-"));
+try {
+  const output = execFileSync(process.execPath, [join(root, "servers/open-meteo/dist/app/main.js")], {
+    cwd: weatherTemporary,
+    input: "",
+    env: {},
+    timeout: WEATHER_SMOKE_TIMEOUT_MS,
+    encoding: "utf8",
+  });
+  if (output.trim()) throw new Error("Open-Meteo MCP server smoke: посторонний вывод в stdout.");
+  console.log("Запуск собранного Open-Meteo MCP server из другого каталога: OK.");
+} finally {
+  rmSync(weatherTemporary, { recursive: true, force: true });
 }
