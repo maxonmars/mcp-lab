@@ -2,6 +2,7 @@
 
 - [0001 — Основа репозитория](0001-repository-foundation.md)
 - [0002 — Получение списка инструментов Filesystem MCP](0002-filesystem-mcp-discovery.md)
+- [0003 — Native tool calling через собственный Open‑Meteo MCP](0003-open-meteo-tool-calling.md)
 
 Новый ADR: контекст задания, рассматриваемые варианты, решение, последствия и проверка.
 Новая точка расширения или ослабление guardrail согласуются до реализации.

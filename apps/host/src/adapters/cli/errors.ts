@@ -1,11 +1,12 @@
 import { AgentError } from "../../core/index.ts";
-import { McpDiscoveryError } from "../../features/mcp/index.ts";
+import { McpDiscoveryError, McpToolSourceError } from "../../features/mcp/index.ts";
 
 export class InputError extends Error {}
 
 export function describeError(error: unknown): string {
   if (error instanceof InputError) return error.message;
   if (error instanceof McpDiscoveryError) return describeMcpError(error);
+  if (error instanceof McpToolSourceError) return describeMcpToolSourceError(error);
   if (!(error instanceof AgentError)) return "Не удалось выполнить операцию.";
   switch (error.code) {
     case "EMPTY_INPUT":
@@ -18,6 +19,14 @@ export function describeError(error: unknown): string {
         : "Модель завершила генерацию без обычного ответа.";
     case "MODEL_FAILURE":
       return error.data.status ? `API вернул HTTP ${error.data.status}.` : "Запрос к модели не выполнен.";
+    case "INVALID_TOOL_CALL_COUNT":
+      return "Модель вернула некорректное число вызовов инструмента.";
+    case "UNKNOWN_TOOL_CALL":
+      return "Модель запросила неизвестный инструмент.";
+    case "INVALID_TOOL_ARGUMENTS":
+      return "Модель передала некорректные аргументы инструмента.";
+    case "TOOL_CALL_LIMIT_EXCEEDED":
+      return "Модель повторно запросила инструмент после результата вызова.";
   }
 }
 
@@ -43,5 +52,26 @@ function describeMcpError(error: McpDiscoveryError): string {
         : "Истёк таймаут получения списка MCP-инструментов.";
     case "CLOSE_FAILED":
       return "Не удалось корректно закрыть MCP-соединение.";
+  }
+}
+
+function describeMcpToolSourceError(error: McpToolSourceError): string {
+  switch (error.code) {
+    case "SERVER_START_FAILED":
+      return "Не удалось запустить MCP-сервер погоды.";
+    case "CONNECT_FAILED":
+      return "Не удалось установить соединение с MCP-сервером погоды.";
+    case "TOOLS_UNSUPPORTED":
+      return "MCP-сервер погоды не объявил поддержку инструментов.";
+    case "LIST_TOOLS_FAILED":
+      return "Не удалось получить список инструментов MCP-сервера погоды.";
+    case "CALL_TOOL_FAILED":
+      return "Не удалось выполнить вызов инструмента MCP-сервера погоды.";
+    case "UNSUPPORTED_TOOL_RESULT":
+      return "MCP-сервер погоды вернул неподдерживаемый формат результата.";
+    case "TIMEOUT":
+      return `Истёк таймаут MCP-сервера погоды на стадии ${error.stage ?? "неизвестно"}.`;
+    case "CLOSE_FAILED":
+      return "Не удалось корректно закрыть соединение с MCP-сервером погоды.";
   }
 }

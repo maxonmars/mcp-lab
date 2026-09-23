@@ -72,6 +72,12 @@ export class CliView {
     );
   }
 
+  /** Одна служебная строка перед финальным ответом; аргументы и содержимое результата не печатаются. */
+  mcpToolStatus(succeeded: boolean): void {
+    const outcome = succeeded ? "выполнено" : "ошибка";
+    this.#output.write(`${this.#paint("muted", `MCP: get_current_weather — ${outcome}`)}\n`);
+  }
+
   error(error: unknown): void {
     const paint = painter(this.#error);
     this.#error.write(`${paint("errorLabel", "Ошибка")}${paint("error", ` · ${describeError(error)}`)}\n`);
