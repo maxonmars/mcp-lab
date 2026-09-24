@@ -22,7 +22,9 @@ it("команды имеют уникальные имена и алиасы, �
     ask: async () => "",
     config: () => [],
     mcpTools: async () => ({ server: { name: "", version: "" }, tools: [] }),
-    view: { answer: () => {}, help: () => {}, config: () => {}, mcpTools: () => {} },
+    schedulerRun: async () => {},
+    schedulerSummary: async () => ({ city: "", markdown: "" }),
+    view: { answer: () => {}, help: () => {}, config: () => {}, mcpTools: () => {}, report: () => {} },
   });
   const names = commands.flatMap((command) => [command.name, ...(command.aliases ?? [])]);
   expect(new Set(names).size).toBe(names.length);

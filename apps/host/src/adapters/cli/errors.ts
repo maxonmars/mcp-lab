@@ -1,5 +1,6 @@
 import { AgentError } from "../../core/index.ts";
 import { McpDiscoveryError, McpToolSourceError } from "../../features/mcp/index.ts";
+import { SchedulerError } from "../../features/scheduler/index.ts";
 
 export class InputError extends Error {}
 
@@ -7,6 +8,7 @@ export function describeError(error: unknown): string {
   if (error instanceof InputError) return error.message;
   if (error instanceof McpDiscoveryError) return describeMcpError(error);
   if (error instanceof McpToolSourceError) return describeMcpToolSourceError(error);
+  if (error instanceof SchedulerError) return describeSchedulerError(error);
   if (!(error instanceof AgentError)) return "Не удалось выполнить операцию.";
   switch (error.code) {
     case "EMPTY_INPUT":
@@ -73,5 +75,25 @@ function describeMcpToolSourceError(error: McpToolSourceError): string {
       return `Истёк таймаут MCP-сервера погоды на стадии ${error.stage ?? "неизвестно"}.`;
     case "CLOSE_FAILED":
       return "Не удалось корректно закрыть соединение с MCP-сервером погоды.";
+  }
+}
+
+function describeSchedulerError(error: SchedulerError): string {
+  const server = error.server === "weather" ? "погоды" : "планировщика";
+  switch (error.code) {
+    case "WORKER_ALREADY_RUNNING":
+      return "Планировщик уже запущен для этой базы.";
+    case "SERVER_START_FAILED":
+      return `Не удалось запустить MCP-сервер ${server}.`;
+    case "CONNECT_FAILED":
+      return `Не удалось установить соединение с MCP-сервером ${server}.`;
+    case "CALL_FAILED":
+      return `MCP-сервер ${server} не выполнил вызов.`;
+    case "TIMEOUT":
+      return `Истёк таймаут MCP-сервера ${server}.`;
+    case "INVALID_RESULT":
+      return `MCP-сервер ${server} вернул неподдерживаемый формат результата.`;
+    case "CLOSE_FAILED":
+      return "Не удалось корректно закрыть соединения планировщика.";
   }
 }

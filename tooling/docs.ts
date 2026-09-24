@@ -12,7 +12,9 @@ export function generatedDocs(): Record<string, string> {
     ask: async () => "",
     config: () => [],
     mcpTools: async () => ({ server: { name: "", version: "" }, tools: [] }),
-    view: { answer: () => {}, help: () => {}, config: () => {}, mcpTools: () => {} },
+    schedulerRun: async () => {},
+    schedulerSummary: async () => ({ city: "", markdown: "" }),
+    view: { answer: () => {}, help: () => {}, config: () => {}, mcpTools: () => {}, report: () => {} },
   });
   const commands = registry.map(
     (command) =>

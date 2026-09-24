@@ -107,3 +107,45 @@ it("не показывает текст неизвестной ошибки", (
   new CliView(capture(), error).error(new Error("sk-secret-value"));
   expect(error.text).toBe("Ошибка · Не удалось выполнить операцию.\n");
 });
+
+it("строка статуса MCP называет фактически вызванный инструмент, без аргументов и результата", () => {
+  const output = capture();
+  const view = new CliView(output, capture());
+  view.mcpToolStatus("get_current_weather", true);
+  view.mcpToolStatus("schedule_weather", true);
+  view.mcpToolStatus("get_weather_summary", false);
+  expect(output.text).toBe(
+    [
+      "MCP: get_current_weather — выполнено",
+      "MCP: schedule_weather — выполнено",
+      "MCP: get_weather_summary — ошибка",
+      "",
+    ].join("\n"),
+  );
+});
+
+it("сводка и служебные сообщения worker: сводка и статус — в stdout, предупреждение — в stderr", () => {
+  const output = capture();
+  const error = capture();
+  const view = new CliView(output, error);
+  view.workerStarted("/data/scheduler.sqlite");
+  view.report("Новосибирск", "---\ncity: Новосибирск\n---\n\nТекст.\n");
+  view.workerStopped();
+  view.warning("Копия .md не записана.");
+  expect(output.text).toBe(
+    [
+      "Планировщик запущен, база: /data/scheduler.sqlite. Остановка — Ctrl+C.",
+      "",
+      "── Сводка · Новосибирск ──",
+      "",
+      "---",
+      "city: Новосибирск",
+      "---",
+      "",
+      "Текст.",
+      "Планировщик остановлен.",
+      "",
+    ].join("\n"),
+  );
+  expect(error.text).toBe("Предупреждение · Копия .md не записана.\n");
+});

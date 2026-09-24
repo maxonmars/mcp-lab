@@ -32,7 +32,7 @@ function fakeFetch(options: { geocodingResults?: unknown[]; geocodingStatus?: nu
     if (url.hostname === "geocoding-api.open-meteo.com") {
       return jsonResponse({ results: options.geocodingResults ?? [geocodingResult] }, options.geocodingStatus ?? 200);
     }
-    return jsonResponse({ current: currentWeather });
+    return jsonResponse({ utc_offset_seconds: 25200, current: currentWeather });
   }) as typeof fetch;
 }
 
@@ -91,7 +91,12 @@ describe("Open-Meteo MCP server: протокольная интеграция",
     });
     expect(result.isError).not.toBe(true);
     expect(result.content).toEqual([{ type: "text", text: expect.stringContaining("Новосибирск") }]);
-    expect(result.structuredContent).toMatchObject({ location: { name: "Новосибирск" }, temperature: 12 });
+    expect(result.structuredContent).toMatchObject({
+      location: { name: "Новосибирск" },
+      observedAt: "2026-09-23T14:00",
+      observedAtUtc: "2026-09-23T07:00:00Z",
+      temperature: 12,
+    });
   });
 
   it("город не найден возвращает isError без обращения к forecast", async () => {

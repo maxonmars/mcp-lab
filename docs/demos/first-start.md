@@ -1,8 +1,9 @@
 # Первый старт
 
 Цель: показать изоляцию агента, работу CLI/REPL и настройки. Раздел «Без API» не обращается к
-MCP-фиче; в разделе «С моделью» `ask` всегда запускает и закрывает сессию собственного Open‑Meteo MCP
-(см. [демо вызова инструмента](open-meteo-tool.md)), но обычные вопросы не приводят к tool call.
+MCP-фиче; в разделе «С моделью» `ask` всегда запускает и закрывает сессии собственных Open‑Meteo и scheduler MCP
+(см. [демо вызова инструмента](open-meteo-tool.md) и [демо планировщика](scheduler.md)), но обычные вопросы
+не приводят к tool call.
 Ожидаемые ответы модели не являются фактически измеренными результатами.
 
 ## Без API
@@ -22,13 +23,15 @@ npm run check:deps
 ```text
 ── Настройки ──
 
-config.file          lab.config.yaml                 (default)
-llm.model            deepseek-flash                  (default)
-llm.timeoutMs        30000                           (default)
-llm.maxOutputTokens  1024                            (default)
-llm.apiKey           [не задано]                     (default)
-mcp.filesystemRoot   docs/demos/fixtures/filesystem  (default)
-mcp.timeoutMs        10000                           (default)
+config.file           lab.config.yaml                 (default)
+llm.model             deepseek-flash                  (default)
+llm.timeoutMs         30000                           (default)
+llm.maxOutputTokens   1024                            (default)
+llm.apiKey            [не задано]                     (default)
+mcp.filesystemRoot    docs/demos/fixtures/filesystem  (default)
+mcp.timeoutMs         10000                           (default)
+scheduler.dbPath      .local/scheduler.sqlite         (default)
+scheduler.reportsDir  .local/reports                  (default)
 ```
 
 При заданном ключе строка llm.apiKey показывает только `[задано]` и источник.

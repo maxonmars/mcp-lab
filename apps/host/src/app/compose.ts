@@ -1,97 +1,73 @@
-import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { CliView, InputError, runCli, type Terminal } from "../adapters/cli/index.ts";
+import { CliView, runCli, type Terminal } from "../adapters/cli/index.ts";
 import { DeepSeekModel, type DeepSeekOptions } from "../adapters/llm/index.ts";
-import { Agent, type ModelPort, type ToolSource } from "../core/index.ts";
+import type { ModelPort } from "../core/index.ts";
 import {
   discoverFilesystemTools,
   type FilesystemDiscoveryOptions,
   type McpDiscoveryResult,
-  resolveOpenMeteoEntrypoint,
-  type StdioToolSourceOptions,
   withStdioToolSource,
 } from "../features/mcp/index.ts";
+import type {
+  Clock,
+  Connect,
+  SchedulerServerConfig,
+  SummaryReadResult,
+  WorkerSession,
+  WorkerSessionConfig,
+} from "../features/scheduler/index.ts";
+import { createAskHandler, type WithToolSource } from "./ask.ts";
 import { createCommands } from "./commands.ts";
 import { parseOptions, type ResolvedConfig, resolveConfig, showConfig } from "./config.ts";
+import { createSchedulerHandlers, type Interrupt } from "./scheduler.ts";
 
-function readSystemPrompt(): string {
-  const base = readFileSync(new URL("./system.md", import.meta.url), "utf8").trim();
-  const weatherTool = readFileSync(new URL("../features/mcp/prompts/weatherTool.md", import.meta.url), "utf8").trim();
-  return `${base}\n\n${weatherTool}`;
-}
+const neverInterrupted: Interrupt = () => ({ signal: new AbortController().signal, release: () => {} });
 
-function observedToolSource(source: ToolSource, view: CliView): ToolSource {
-  return {
-    listTools: () => source.listTools(),
-    callTool: async (invocation) => {
-      try {
-        const result = await source.callTool(invocation);
-        view.mcpToolStatus(!result.isError);
-        return result;
-      } catch (error) {
-        view.mcpToolStatus(false);
-        throw error;
-      }
-    },
-  };
-}
-
-type AskHandlerOptions = Readonly<{
-  nodeExecutable: string;
-  createModel: (options: DeepSeekOptions) => ModelPort;
-  withWeatherToolSource: (
-    options: StdioToolSourceOptions,
-    use: (source: ToolSource) => Promise<string>,
-  ) => Promise<string>;
-  view: CliView;
-  getConfig: () => ResolvedConfig;
-}>;
-
-function createAskHandler(options: AskHandlerOptions): (text: string) => Promise<string> {
-  let agent: Agent | undefined;
-  return (text) => {
-    if (!agent) {
-      const config = options.getConfig();
-      const apiKey = config.values["llm.apiKey"];
-      if (!apiKey) throw new InputError("Задайте LAB_LLM_API_KEY в окружении процесса.");
-      const model = options.createModel({
-        apiKey,
-        model: config.values["llm.model"],
-        timeoutMs: config.values["llm.timeoutMs"],
-        maxOutputTokens: config.values["llm.maxOutputTokens"],
-      });
-      agent = new Agent(model, readSystemPrompt());
-    }
-    const currentAgent = agent;
-    const timeoutMs = options.getConfig().values["mcp.timeoutMs"];
-    return options.withWeatherToolSource(
-      { command: options.nodeExecutable, args: [resolveOpenMeteoEntrypoint(import.meta.url)], timeoutMs },
-      (source) => currentAgent.respond(text, observedToolSource(source, options.view)),
-    );
-  };
-}
-
-export async function run(options: {
+export type RunOptions = Readonly<{
   argv: readonly string[];
   env: Readonly<Record<string, string | undefined>>;
   cwd: string;
   nodeExecutable: string;
   terminal: Terminal;
+  /** Создаёт сигнал остановки для `scheduler run`; SIGINT обрабатывает main.ts. */
+  interrupt?: Interrupt;
+  /** Часы worker; тесты подставляют управляемые. */
+  clock?: Clock;
   createModel?: (options: DeepSeekOptions) => ModelPort;
   discoverFilesystemTools?: (options: FilesystemDiscoveryOptions) => Promise<McpDiscoveryResult>;
-  withWeatherToolSource?: (
-    options: StdioToolSourceOptions,
-    use: (source: ToolSource) => Promise<string>,
-  ) => Promise<string>;
-}): Promise<number> {
+  withWeatherToolSource?: WithToolSource;
+  withSchedulerToolSource?: WithToolSource;
+  openWorkerSession?: (config: WorkerSessionConfig) => Promise<WorkerSession>;
+  readSchedulerSummary?: (
+    config: SchedulerServerConfig & Readonly<{ connect?: Connect | undefined }>,
+    target: string,
+  ) => Promise<SummaryReadResult>;
+}>;
+
+export async function run(options: RunOptions): Promise<number> {
   let config: ResolvedConfig;
   const view = new CliView(options.terminal.output, options.terminal.error);
+  const createModel = options.createModel ?? ((settings: DeepSeekOptions) => new DeepSeekModel(settings));
+  const getConfig = () => config;
   const ask = createAskHandler({
+    cwd: options.cwd,
     nodeExecutable: options.nodeExecutable,
-    createModel: options.createModel ?? ((settings) => new DeepSeekModel(settings)),
+    createModel,
     withWeatherToolSource: options.withWeatherToolSource ?? withStdioToolSource,
+    withSchedulerToolSource: options.withSchedulerToolSource ?? withStdioToolSource,
     view,
-    getConfig: () => config,
+    getConfig,
+  });
+  const scheduler = createSchedulerHandlers({
+    cwd: options.cwd,
+    nodeExecutable: options.nodeExecutable,
+    getConfig,
+    createModel,
+    view,
+    interrupt: options.interrupt ?? neverInterrupted,
+    clock: options.clock,
+    openWorkerSession: options.openWorkerSession,
+    readSummary: options.readSchedulerSummary,
   });
   const commands = createCommands({
     ask,
@@ -104,6 +80,8 @@ export async function run(options: {
         nodeExecutable: options.nodeExecutable,
       });
     },
+    schedulerRun: scheduler.run,
+    schedulerSummary: scheduler.summary,
     view,
   });
   let command: string[];

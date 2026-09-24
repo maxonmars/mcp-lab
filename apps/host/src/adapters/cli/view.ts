@@ -7,7 +7,7 @@ import { type Paint, painter } from "./paint.ts";
 
 export type HelpSetting = Readonly<{ flag: string; type: string; description: string }>;
 export type ConfigRow = Readonly<{ key: string; value: string; source: string }>;
-export type CommandView = Pick<CliView, "answer" | "help" | "config" | "mcpTools">;
+export type CommandView = Pick<CliView, "answer" | "help" | "config" | "mcpTools" | "report">;
 
 const fallbackWidth = 88;
 const columnGap = "  ";
@@ -73,9 +73,28 @@ export class CliView {
   }
 
   /** Одна служебная строка перед финальным ответом; аргументы и содержимое результата не печатаются. */
-  mcpToolStatus(succeeded: boolean): void {
+  mcpToolStatus(toolName: string, succeeded: boolean): void {
     const outcome = succeeded ? "выполнено" : "ошибка";
-    this.#output.write(`${this.#paint("muted", `MCP: get_current_weather — ${outcome}`)}\n`);
+    this.#output.write(`${this.#paint("muted", `MCP: ${toolName} — ${outcome}`)}\n`);
+  }
+
+  /** Опубликованная сводка планировщика: в терминале worker и в `scheduler summary`. */
+  report(city: string, markdown: string): void {
+    this.#block(`Сводка · ${city}`, [markdown.trimEnd()]);
+  }
+
+  workerStarted(dbPath: string): void {
+    this.#output.write(`${this.#paint("muted", `Планировщик запущен, база: ${dbPath}. Остановка — Ctrl+C.`)}\n`);
+  }
+
+  workerStopped(): void {
+    this.#output.write(`${this.#paint("muted", "Планировщик остановлен.")}\n`);
+  }
+
+  /** Предупреждение, не прерывающее работу: пишется в stderr. */
+  warning(text: string): void {
+    const paint = painter(this.#error);
+    this.#error.write(`${paint("errorLabel", "Предупреждение")}${paint("error", ` · ${text}`)}\n`);
   }
 
   error(error: unknown): void {

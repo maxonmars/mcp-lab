@@ -5,12 +5,41 @@ import { settingEntries } from "./settings.ts";
 
 const descriptions = sections(new URL("./commands.md", import.meta.url));
 
-export function createCommands(context: {
+type CommandContext = {
   ask: (text: string) => Promise<string>;
   config: () => readonly ConfigRow[];
   mcpTools: () => Promise<McpDiscoveryResult>;
+  schedulerRun: () => Promise<void>;
+  schedulerSummary: (target: string) => Promise<{ city: string; markdown: string }>;
   view: CommandView;
-}): readonly Command[] {
+};
+
+function schedulerCommands(context: CommandContext): Command[] {
+  return [
+    {
+      name: "scheduler run",
+      arguments: [],
+      description: descriptions["scheduler run"] ?? "",
+      run: async () => {
+        await context.schedulerRun();
+        return "continue";
+      },
+    },
+    {
+      name: "scheduler summary",
+      arguments: ["<город|ID>"],
+      missingArgument: "Не указан город или ID расписания.",
+      description: descriptions["scheduler summary"] ?? "",
+      run: async (args) => {
+        const summary = await context.schedulerSummary(args.join(" ").trim());
+        context.view.report(summary.city, summary.markdown);
+        return "continue";
+      },
+    },
+  ];
+}
+
+export function createCommands(context: CommandContext): readonly Command[] {
   const commands: Command[] = [
     {
       name: "ask",
@@ -52,6 +81,7 @@ export function createCommands(context: {
         return "continue";
       },
     },
+    ...schedulerCommands(context),
     {
       name: "exit",
       arguments: [],

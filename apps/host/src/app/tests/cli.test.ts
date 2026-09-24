@@ -70,6 +70,7 @@ async function invoke(argv: string[], opts: InvokeOptions = {}) {
     createModel,
     discoverFilesystemTools: opts.discoverFilesystemTools,
     withWeatherToolSource: opts.withWeatherToolSource ?? defaultWithWeatherToolSource,
+    withSchedulerToolSource: defaultWithWeatherToolSource,
     terminal: {
       input: Readable.from([opts.input ?? ""]),
       interactive: opts.terminal?.interactive ?? false,
@@ -213,7 +214,9 @@ describe("CLI и REPL", () => {
   it("интерактивный REPL показывает заголовок один раз и приглашение перед каждым вводом", async () => {
     const result = await invoke([], { input: "Вопрос\n/exit\n", terminal: { interactive: true } });
     expect(result.output.match(/── mcp-lab ──/g)).toHaveLength(1);
-    expect(result.output).toContain("/ask · /help · /config show · /mcp tools · /exit");
+    expect(result.output).toContain(
+      "/ask · /help · /config show · /mcp tools · /scheduler run · /scheduler summary · /exit",
+    );
     expect(result.output.match(/mcp-lab > /g)).toHaveLength(2);
     expect(result.output.indexOf("── mcp-lab ──")).toBeLessThan(result.output.indexOf("mcp-lab > "));
   });

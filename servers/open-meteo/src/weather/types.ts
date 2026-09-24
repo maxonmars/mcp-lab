@@ -12,6 +12,7 @@ export type GeocodedPlace = Readonly<{
 
 export type CurrentWeather = Readonly<{
   time: string;
+  timeUtc: string;
   temperature: number;
   apparentTemperature: number;
   relativeHumidity: number;

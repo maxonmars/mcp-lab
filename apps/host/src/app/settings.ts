@@ -16,6 +16,8 @@ export const settings = {
     type: "string",
   },
   "mcp.timeoutMs": { schema: positiveInteger, default: 10000, type: "number" },
+  "scheduler.dbPath": { schema: z.string().trim().min(1), default: ".local/scheduler.sqlite", type: "string" },
+  "scheduler.reportsDir": { schema: z.string().trim().min(1), default: ".local/reports", type: "string" },
 } as const;
 
 export type SettingKey = keyof typeof settings;
