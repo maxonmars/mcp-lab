@@ -2,6 +2,7 @@ import { z } from "zod/v4";
 import { WeatherApiError } from "./errors.ts";
 import { fetchJson } from "./httpClient.ts";
 import type { CurrentWeather, GeocodedPlace, WeatherDependencies } from "./types.ts";
+import { toUtcTime } from "./utcTime.ts";
 
 const currentSchema = z.object({
   time: z.string(),
@@ -12,7 +13,7 @@ const currentSchema = z.object({
   weather_code: z.number(),
   wind_speed_10m: z.number(),
 });
-const forecastResponseSchema = z.object({ current: currentSchema });
+const forecastResponseSchema = z.object({ utc_offset_seconds: z.number(), current: currentSchema });
 
 const CURRENT_VARIABLES = [
   "temperature_2m",
@@ -35,9 +36,12 @@ export async function fetchCurrentWeather(place: GeocodedPlace, deps: WeatherDep
   const payload = await fetchJson(url, deps.fetchImpl, deps.timeoutMs, "weather");
   const parsed = forecastResponseSchema.safeParse(payload);
   if (!parsed.success) throw new WeatherApiError("WEATHER_INVALID_PAYLOAD");
-  const { current } = parsed.data;
+  const { current, utc_offset_seconds: utcOffsetSeconds } = parsed.data;
+  const timeUtc = toUtcTime(current.time, utcOffsetSeconds);
+  if (!timeUtc) throw new WeatherApiError("WEATHER_INVALID_PAYLOAD");
   return {
     time: current.time,
+    timeUtc,
     temperature: current.temperature_2m,
     apparentTemperature: current.apparent_temperature,
     relativeHumidity: current.relative_humidity_2m,

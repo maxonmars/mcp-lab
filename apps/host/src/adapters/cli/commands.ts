@@ -3,6 +3,8 @@ import { InputError } from "./errors.ts";
 export type Command = Readonly<{
   name: string;
   arguments: readonly string[];
+  /** Сообщение, когда обязательный аргумент не указан; по умолчанию — про текст реплики. */
+  missingArgument?: string;
   aliases?: readonly string[];
   description: string;
   run: (args: readonly string[]) => Promise<"continue" | "exit">;
@@ -17,7 +19,8 @@ export function dispatch(commands: readonly Command[], argv: readonly string[]):
   const alias = command.aliases?.includes(argv[0] ?? "");
   const args = argv.slice(alias ? 1 : command.name.split(" ").length);
   if (command.arguments.length === 0 && args.length > 0) throw new InputError("У команды нет аргументов.");
-  if (command.arguments.length > 0 && !args.join(" ").trim()) throw new InputError("Не указан текст реплики.");
+  if (command.arguments.length > 0 && !args.join(" ").trim())
+    throw new InputError(command.missingArgument ?? "Не указан текст реплики.");
   return command.run(args);
 }
 

@@ -1,6 +1,7 @@
 import { expect, it } from "vitest";
 import { AgentError } from "../../../core/index.ts";
 import { McpDiscoveryError, McpToolSourceError } from "../../../features/mcp/index.ts";
+import { SchedulerError } from "../../../features/scheduler/index.ts";
 import { describeError, InputError } from "../index.ts";
 
 it("указывает лимит токенов только при finish_reason length", () => {
@@ -38,4 +39,17 @@ it("переводит ошибки McpToolSourceError без утечки stage
   expect(describeError(new McpToolSourceError("UNSUPPORTED_TOOL_RESULT"))).toContain("неподдерживаемый формат");
   expect(describeError(new McpToolSourceError("TIMEOUT", { stage: "callTool" }))).toContain("callTool");
   expect(describeError(new McpToolSourceError("CLOSE_FAILED"))).toContain("закрыть соединение");
+});
+
+it("переводит ошибки планировщика: отказ второго worker и отдельные формулировки для серверов", () => {
+  expect(describeError(new SchedulerError("WORKER_ALREADY_RUNNING", "scheduler"))).toBe(
+    "Планировщик уже запущен для этой базы.",
+  );
+  expect(describeError(new SchedulerError("SERVER_START_FAILED", "weather"))).toContain("сервер погоды");
+  expect(describeError(new SchedulerError("SERVER_START_FAILED", "scheduler"))).toContain("сервер планировщика");
+  expect(describeError(new SchedulerError("CONNECT_FAILED", "scheduler"))).toContain("соединение");
+  expect(describeError(new SchedulerError("CALL_FAILED", "scheduler"))).toContain("не выполнил вызов");
+  expect(describeError(new SchedulerError("TIMEOUT", "weather"))).toContain("таймаут");
+  expect(describeError(new SchedulerError("INVALID_RESULT", "scheduler"))).toContain("неподдерживаемый формат");
+  expect(describeError(new SchedulerError("CLOSE_FAILED"))).toContain("закрыть соединения");
 });

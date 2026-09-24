@@ -4,6 +4,7 @@
 
 - Самостоятельный npm workspace `@mcp-lab/open-meteo-server`. Не импортирует host и другие серверы.
 - Регистрирует ровно один инструмент `get_current_weather` поверх публичного Open‑Meteo API.
+- `observedAtUtc` строится из `utc_offset_seconds` ответа API; локальное `observedAt` не трактуется как UTC.
 - `process`, argv и env доступны только в `src/app/main.ts`; API-клиент получает `fetch` через DI.
 - stdout — только MCP protocol; любой лог — только stderr.
 - `src/index.ts` экспортирует только factory сервера и типы, нужные тестам и host.

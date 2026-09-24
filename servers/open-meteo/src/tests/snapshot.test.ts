@@ -14,6 +14,7 @@ const place: GeocodedPlace = {
 
 const current: CurrentWeather = {
   time: "2026-09-23T14:00",
+  timeUtc: "2026-09-23T07:00:00Z",
   temperature: 12,
   apparentTemperature: 10,
   relativeHumidity: 65,
@@ -35,6 +36,8 @@ describe("buildSnapshot", () => {
     });
     expect(snapshot.condition).toEqual({ code: 3, description: "пасмурно" });
     expect(snapshot.location.timezone).toBe("Asia/Novosibirsk");
+    expect(snapshot.observedAt).toBe("2026-09-23T14:00");
+    expect(snapshot.observedAtUtc).toBe("2026-09-23T07:00:00Z");
   });
 });
 

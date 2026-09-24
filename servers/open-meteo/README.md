@@ -25,12 +25,15 @@ Annotations: `readOnlyHint: true`, `destructiveHint: false`, `idempotentHint: tr
 `structuredContent` и текстовый `content` с тем же смыслом:
 
 - `location` — `name`, необязательные `admin1`/`country`/`countryCode`, `latitude`, `longitude`, `timezone`;
-- `observedAt` — локальное время наблюдения;
+- `observedAt` — локальное время наблюдения (для показа);
+- `observedAtUtc` — то же наблюдение в UTC, `YYYY-MM-DDTHH:MM:SSZ`; вычисляется из локального времени и
+  `utc_offset_seconds` того же ответа Open‑Meteo, а без этого поля ответ считается некорректным;
 - `condition` — `code` (WMO) и русское `description`;
 - `temperature`, `apparentTemperature`, `relativeHumidity`, `precipitation`, `windSpeed`;
 - `units` — единицы всех числовых полей выше.
 
-Полный необработанный ответ Open‑Meteo не возвращается.
+Полный необработанный ответ Open‑Meteo не возвращается. Open‑Meteo обновляет текущие условия по 15-минутным
+модельным данным, поэтому повторные запросы в пределах слота возвращают одно и то же `observedAtUtc`.
 
 ## Ошибки
 
@@ -72,6 +75,9 @@ Inspector подключается по stdio, покажет `get_current_weath
 `isError: true` и текст вида «Место не найдено сервисом геокодирования Open-Meteo.».
 
 ## Подключение host
+
+Необязательный флаг `--ignore-sigint` нужен процессу, которым владеет worker планировщика: Ctrl+C приходит
+всей группе процессов терминала, а опрос должен завершиться и сохраниться.
 
 Host запускает `src/app/main.ts` (dev) или `dist/app/main.js` (после сборки) отдельным процессом по
 stdio, используя `@modelcontextprotocol/client@2.0.0` с `versionNegotiation.mode = "auto"`; сервер

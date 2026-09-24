@@ -1,10 +1,56 @@
 import { execFileSync } from "node:child_process";
-import { copyFileSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
+import { Client } from "@modelcontextprotocol/client";
+import { StdioClientTransport } from "@modelcontextprotocol/client/stdio";
 import { files, localPath, workspacePaths } from "./files.ts";
 
 const WEATHER_SMOKE_TIMEOUT_MS = 5_000;
+const SCHEDULER_SMOKE_TIMEOUT_MS = 10_000;
+const PUBLIC_SCHEDULER_TOOLS = ["cancel_weather_schedule", "get_weather_summary", "schedule_weather"];
+
+/** Собранный сервер планировщика из другого каталога: список инструментов, запись в SQLite, режим worker. */
+async function schedulerSmoke(root: string): Promise<void> {
+  const temporary = mkdtempSync(join(tmpdir(), "mcp-lab-build-scheduler-"));
+  const dbPath = join(temporary, "data", "scheduler.sqlite");
+  const start = async (...flags: string[]) => {
+    const client = new Client({ name: "build-smoke", version: "0.0.0" }, { versionNegotiation: { mode: "auto" } });
+    const args = [
+      join(root, "servers/scheduler/dist/app/main.js"),
+      "--db",
+      dbPath,
+      "--reports-dir",
+      join(temporary, "reports"),
+      ...flags,
+    ];
+    const transport = new StdioClientTransport({ command: process.execPath, args, cwd: temporary, stderr: "ignore" });
+    await client.connect(transport, { timeout: SCHEDULER_SMOKE_TIMEOUT_MS });
+    return client;
+  };
+  const publicClient = await start();
+  const workerClient = await start("--worker");
+  try {
+    const listed = (await publicClient.listTools()).tools.map((tool) => tool.name).sort();
+    if (listed.join() !== PUBLIC_SCHEDULER_TOOLS.join())
+      throw new Error("Scheduler MCP server smoke: неверный список публичных инструментов.");
+    const workerTools = (await workerClient.listTools()).tools.map((tool) => tool.name);
+    if (workerTools.length === 0 || workerTools.some((name) => !name.startsWith("worker_"))) {
+      throw new Error("Scheduler MCP server smoke: режим worker показывает не служебные инструменты.");
+    }
+    const arguments_ = { city: "Омск", collectEverySeconds: 10, summaryEverySeconds: 60 };
+    const created = await publicClient.callTool(
+      { name: "schedule_weather", arguments: arguments_ },
+      { timeout: SCHEDULER_SMOKE_TIMEOUT_MS },
+    );
+    if (created.isError || !existsSync(dbPath))
+      throw new Error("Scheduler MCP server smoke: расписание не записано в SQLite.");
+  } finally {
+    await publicClient.close();
+    await workerClient.close();
+    rmSync(temporary, { recursive: true, force: true });
+  }
+}
 const root = resolve(".");
 for (const workspace of workspacePaths(root)) {
   rmSync(join(workspace, "dist"), { recursive: true, force: true });
@@ -57,3 +103,6 @@ try {
 } finally {
   rmSync(weatherTemporary, { recursive: true, force: true });
 }
+
+await schedulerSmoke(root);
+console.log("Запуск собранного Scheduler MCP server из другого каталога: OK.");

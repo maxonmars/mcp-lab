@@ -1,9 +1,10 @@
 # mcp-lab
 
-Учебный host на TypeScript и Node 24: CLI-агент с native tool calling через собственный Open‑Meteo
-MCP-сервер и подключение к локальному Filesystem MCP. Агент отправляет системную инструкцию и текущую
-реплику в DeepSeek; между репликами история не сохраняется. Для актуальной погоды DeepSeek сам решает
-вызвать MCP-инструмент `get_current_weather`, не более одного вызова за реплику.
+Учебный host на TypeScript и Node 24: CLI-агент с native tool calling через собственные MCP-серверы
+(Open‑Meteo и планировщик погоды), фоновый worker планировщика и подключение к локальному Filesystem MCP.
+Агент отправляет системную инструкцию и текущую реплику в DeepSeek; между репликами история не сохраняется.
+DeepSeek сам решает вызвать MCP-инструмент (`get_current_weather`, `schedule_weather`, `get_weather_summary`,
+`cancel_weather_schedule`), не более одного вызова за реплику.
 
 ## Запуск
 
@@ -31,15 +32,36 @@ npm run dev -- ask "Какая сейчас погода в Новосибирс
 npm run dev -- help
 npm run dev -- config show
 npm run dev -- mcp tools
+npm run dev -- scheduler run
+npm run dev -- scheduler summary Новосибирск
 ```
 
-Справка, просмотр настроек и `mcp tools` работают без ключа. `mcp tools` получает список от настоящего
-локального Filesystem-сервера, но не вызывает инструменты и не обращается к модели. `ask` требует ключ:
-на каждый вызов host запускает собственный Open‑Meteo MCP-сервер по stdio и закрывает сессию после
-ответа; если DeepSeek решит вызвать инструмент, перед ответом печатается одна строка
-`MCP: get_current_weather — выполнено` (или `— ошибка`).
+Справка, просмотр настроек, `mcp tools` и `scheduler summary` работают без ключа. `mcp tools` получает список от
+настоящего локального Filesystem-сервера, но не вызывает инструменты и не обращается к модели. `ask` и
+`scheduler run` требуют ключ: на каждый `ask` host запускает собственные Open‑Meteo и scheduler MCP-серверы по
+stdio и закрывает сессии после ответа; если DeepSeek решит вызвать инструмент, перед ответом печатается одна
+строка `MCP: <имя инструмента> — выполнено` (или `— ошибка`).
 `npm run dev` и `npm start` читают корневой `.env`, если он существует. Переменная, переданная
 окружением процесса, имеет приоритет. Значение секрета не выводится в config show.
+
+## Планировщик погоды
+
+Терминал A запускает worker и занимает терминал до Ctrl+C: он опрашивает Open‑Meteo через MCP, пишет каждый
+опрос в SQLite и по своему сроку печатает сводку, написанную моделью. Терминал B создаёт расписание через `ask`
+и читает сводку.
+
+```sh
+npm run dev -- scheduler run            # терминал A, нужен LAB_LLM_API_KEY
+npm run dev -- ask "Проверяй погоду в Новосибирске каждые 10 секунд, выводи сводку раз в минуту"   # терминал B
+npm run dev -- scheduler summary Новосибирск   # без модели и без ключа
+```
+
+Состояние — `.local/scheduler.sqlite`, копии последних сводок — `.local/reports/<ID>.md` (пути задают
+`scheduler.dbPath` и `scheduler.reportsDir`). Источник истины для чтения — SQLite. Worker работает, пока
+открыт терминал и включён Mac; после закрытия терминала или перезагрузки его запускают заново, автозапуска нет.
+Подробности и сценарий двух терминалов — в [демо](docs/demos/scheduler.md),
+[ADR 0004](docs/adr/0004-scheduler-worker.md) и README [фичи](apps/host/src/features/scheduler/README.md) и
+[сервера](servers/scheduler/README.md).
 
 ## Настройки
 
@@ -86,9 +108,12 @@ npm start -- mcp tools
 - [Начальное решение](docs/adr/0001-repository-foundation.md)
 - [Первое подключение MCP](docs/adr/0002-filesystem-mcp-discovery.md)
 - [Native tool calling через Open‑Meteo MCP](docs/adr/0003-open-meteo-tool-calling.md)
+- [Планировщик с worker в host](docs/adr/0004-scheduler-worker.md)
 - [Host](apps/host/README.md)
 - [Open‑Meteo MCP server](servers/open-meteo/README.md)
+- [Scheduler MCP server](servers/scheduler/README.md)
 - [Короткое демо](docs/demos/first-start.md)
 - [Демо списка MCP-инструментов](docs/demos/mcp-tools.md)
 - [Демо вызова Open‑Meteo MCP-инструмента](docs/demos/open-meteo-tool.md)
+- [Демо планировщика в двух терминалах](docs/demos/scheduler.md)
 - [Направления курса](docs/course.md) — будущие задания, без реализации в текущем старте

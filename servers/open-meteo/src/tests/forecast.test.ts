@@ -17,6 +17,7 @@ const place: GeocodedPlace = {
   timezone: "Asia/Novosibirsk",
 };
 
+const utcOffsetSeconds = 25200;
 const validCurrent = {
   time: "2026-09-23T14:00",
   temperature_2m: 12.3,
@@ -29,7 +30,9 @@ const validCurrent = {
 
 describe("fetchCurrentWeather", () => {
   it("передаёт координаты и все переменные current, а также единицы измерения", async () => {
-    const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(jsonResponse({ current: validCurrent }));
+    const fetchImpl = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(jsonResponse({ utc_offset_seconds: utcOffsetSeconds, current: validCurrent }));
     await fetchCurrentWeather(place, deps(fetchImpl));
     const [url] = fetchImpl.mock.calls[0] ?? [];
     const requested = new URL(String(url));
@@ -46,9 +49,12 @@ describe("fetchCurrentWeather", () => {
   });
 
   it("нормализует поля ответа", async () => {
-    const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(jsonResponse({ current: validCurrent }));
+    const fetchImpl = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(jsonResponse({ utc_offset_seconds: utcOffsetSeconds, current: validCurrent }));
     await expect(fetchCurrentWeather(place, deps(fetchImpl))).resolves.toEqual({
       time: "2026-09-23T14:00",
+      timeUtc: "2026-09-23T07:00:00Z",
       temperature: 12.3,
       apparentTemperature: 10.1,
       relativeHumidity: 65,
@@ -56,6 +62,35 @@ describe("fetchCurrentWeather", () => {
       weatherCode: 3,
       windSpeed: 14.4,
     });
+  });
+
+  it("получает UTC из utc_offset_seconds, а не трактует локальное время как UTC", async () => {
+    const cases: [string, number, string][] = [
+      ["2026-09-23T14:00", 25200, "2026-09-23T07:00:00Z"],
+      ["2026-09-23T02:15", 25200, "2026-09-22T19:15:00Z"],
+      ["2026-09-23T14:00", -14400, "2026-09-23T18:00:00Z"],
+      ["2026-09-23T14:00", 19800, "2026-09-23T08:30:00Z"],
+      ["2026-09-23T14:00", 0, "2026-09-23T14:00:00Z"],
+    ];
+    for (const [time, offset, expected] of cases) {
+      const fetchImpl = vi
+        .fn<typeof fetch>()
+        .mockResolvedValue(jsonResponse({ utc_offset_seconds: offset, current: { ...validCurrent, time } }));
+      await expect(fetchCurrentWeather(place, deps(fetchImpl))).resolves.toMatchObject({ time, timeUtc: expected });
+    }
+  });
+
+  it("ответ без utc_offset_seconds или с нераспознанным временем даёт WEATHER_INVALID_PAYLOAD", async () => {
+    for (const payload of [
+      { current: validCurrent },
+      { utc_offset_seconds: utcOffsetSeconds, current: { ...validCurrent, time: "вчера" } },
+      { utc_offset_seconds: 0.5, current: validCurrent },
+    ]) {
+      const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(jsonResponse(payload));
+      await expect(fetchCurrentWeather(place, deps(fetchImpl))).rejects.toMatchObject({
+        code: "WEATHER_INVALID_PAYLOAD",
+      });
+    }
   });
 
   it("сетевой сбой даёт WEATHER_NETWORK_FAILED", async () => {
