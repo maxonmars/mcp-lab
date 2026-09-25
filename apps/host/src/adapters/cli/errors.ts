@@ -1,5 +1,6 @@
 import { AgentError } from "../../core/index.ts";
 import { McpDiscoveryError, McpToolSourceError } from "../../features/mcp/index.ts";
+import { describeOutfitError, OutfitError } from "../../features/outfit/index.ts";
 import { SchedulerError } from "../../features/scheduler/index.ts";
 
 export class InputError extends Error {}
@@ -9,6 +10,9 @@ export function describeError(error: unknown): string {
   if (error instanceof McpDiscoveryError) return describeMcpError(error);
   if (error instanceof McpToolSourceError) return describeMcpToolSourceError(error);
   if (error instanceof SchedulerError) return describeSchedulerError(error);
+  if (error instanceof OutfitError) {
+    return describeOutfitError(error, error.cause === undefined ? undefined : describeError(error.cause));
+  }
   if (!(error instanceof AgentError)) return "Не удалось выполнить операцию.";
   switch (error.code) {
     case "EMPTY_INPUT":

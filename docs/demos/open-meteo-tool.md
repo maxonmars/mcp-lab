@@ -18,8 +18,8 @@
 npx @modelcontextprotocol/inspector node servers/open-meteo/src/app/main.ts
 ```
 
-Inspector подключается по stdio и показывает единственный инструмент `get_current_weather` с его
-input- и output-схемой.
+Inspector подключается по stdio и в обычном режиме показывает только `get_current_weather` с его
+input- и output-схемой. Три инструмента outfit-режима — в [демо совета по одежде](outfit.md).
 
 ## Ручной вызов инструмента
 

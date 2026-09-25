@@ -3,6 +3,15 @@ import { createCommands } from "../apps/host/src/app/commands.ts";
 import { settingEntries } from "../apps/host/src/app/settings.ts";
 import { isMain } from "./files.ts";
 
+const silentView = {
+  answer: () => {},
+  help: () => {},
+  config: () => {},
+  mcpTools: () => {},
+  outfitAdvice: () => {},
+  report: () => {},
+};
+
 export function generatedDocs(): Record<string, string> {
   const cell = (value: unknown) => String(value).replaceAll("|", "\\|").replaceAll("\n", " ");
   const settings = settingEntries.map((entry) => {
@@ -12,9 +21,10 @@ export function generatedDocs(): Record<string, string> {
     ask: async () => "",
     config: () => [],
     mcpTools: async () => ({ server: { name: "", version: "" }, tools: [] }),
+    outfit: async () => ({ markdown: "", path: "" }),
     schedulerRun: async () => {},
     schedulerSummary: async () => ({ city: "", markdown: "" }),
-    view: { answer: () => {}, help: () => {}, config: () => {}, mcpTools: () => {}, report: () => {} },
+    view: silentView,
   });
   const commands = registry.map(
     (command) =>

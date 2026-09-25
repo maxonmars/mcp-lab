@@ -1,6 +1,17 @@
 import { z } from "zod/v4";
-import type { CurrentWeather, GeocodedPlace } from "./types.ts";
+import type { CurrentWeather, GeocodedPlace, HourlyForecast } from "./types.ts";
 import { describeWeatherCode } from "./wmoCodes.ts";
+
+const nextHourSchema = z.object({
+  time: z.string(),
+  timeUtc: z.string(),
+  condition: z.object({ code: z.number(), description: z.string() }),
+  temperature: z.number(),
+  apparentTemperature: z.number(),
+  windSpeed: z.number(),
+  precipitationLastHour: z.number(),
+  precipitationProbabilityLastHour: z.number().optional(),
+});
 
 export const weatherSnapshotSchema = z.object({
   location: z.object({
@@ -27,6 +38,7 @@ export const weatherSnapshotSchema = z.object({
     precipitation: z.string(),
     windSpeed: z.string(),
   }),
+  nextHours: z.array(nextHourSchema).optional(),
 });
 
 export type WeatherSnapshot = z.infer<typeof weatherSnapshotSchema>;
@@ -39,8 +51,12 @@ const UNITS = {
   windSpeed: "км/ч",
 } as const;
 
-export function buildSnapshot(place: GeocodedPlace, current: CurrentWeather): WeatherSnapshot {
-  return {
+export function buildSnapshot(
+  place: GeocodedPlace,
+  current: CurrentWeather,
+  nextHours?: readonly HourlyForecast[],
+): WeatherSnapshot {
+  const snapshot: WeatherSnapshot = {
     location: {
       name: place.name,
       admin1: place.admin1,
@@ -60,6 +76,42 @@ export function buildSnapshot(place: GeocodedPlace, current: CurrentWeather): We
     windSpeed: current.windSpeed,
     units: UNITS,
   };
+  return nextHours ? { ...snapshot, nextHours: nextHours.map(toNextHour) } : snapshot;
+}
+
+function toNextHour(hour: HourlyForecast): NonNullable<WeatherSnapshot["nextHours"]>[number] {
+  return {
+    time: hour.time,
+    timeUtc: hour.timeUtc,
+    condition: { code: hour.weatherCode, description: describeWeatherCode(hour.weatherCode) },
+    temperature: hour.temperature,
+    apparentTemperature: hour.apparentTemperature,
+    windSpeed: hour.windSpeed,
+    precipitationLastHour: hour.precipitationLastHour,
+    ...(hour.precipitationProbabilityLastHour === undefined
+      ? {}
+      : { precipitationProbabilityLastHour: hour.precipitationProbabilityLastHour }),
+  };
+}
+
+function nextHoursLines(snapshot: WeatherSnapshot): string[] {
+  if (!snapshot.nextHours) return [];
+  const units = snapshot.units;
+  return [
+    `Прогноз на ближайшие часы (местное время, ${snapshot.location.timezone}). Состояние, температура и ветер — на момент отметки; осадки и их вероятность — за час перед отметкой.`,
+    ...snapshot.nextHours.map((hour) => {
+      const probability =
+        hour.precipitationProbabilityLastHour === undefined
+          ? "нет данных"
+          : `${hour.precipitationProbabilityLastHour}%`;
+      return (
+        `- ${hour.time}: ${hour.condition.description}; ` +
+        `температура ${hour.temperature}${units.temperature} (ощущается как ${hour.apparentTemperature}${units.apparentTemperature}); ` +
+        `ветер ${hour.windSpeed} ${units.windSpeed}; ` +
+        `осадки за час до отметки ${hour.precipitationLastHour} ${units.precipitation}, вероятность осадков за этот час: ${probability}.`
+      );
+    }),
+  ];
 }
 
 export function formatWeatherText(snapshot: WeatherSnapshot): string {
@@ -74,5 +126,6 @@ export function formatWeatherText(snapshot: WeatherSnapshot): string {
     `Влажность: ${snapshot.relativeHumidity}${units.relativeHumidity}.`,
     `Осадки: ${snapshot.precipitation} ${units.precipitation}.`,
     `Ветер: ${snapshot.windSpeed} ${units.windSpeed}.`,
+    ...nextHoursLines(snapshot),
   ].join("\n");
 }

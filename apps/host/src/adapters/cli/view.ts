@@ -7,7 +7,7 @@ import { type Paint, painter } from "./paint.ts";
 
 export type HelpSetting = Readonly<{ flag: string; type: string; description: string }>;
 export type ConfigRow = Readonly<{ key: string; value: string; source: string }>;
-export type CommandView = Pick<CliView, "answer" | "help" | "config" | "mcpTools" | "report">;
+export type CommandView = Pick<CliView, "answer" | "help" | "config" | "mcpTools" | "outfitAdvice" | "report">;
 
 const fallbackWidth = 88;
 const columnGap = "  ";
@@ -76,6 +76,10 @@ export class CliView {
   mcpToolStatus(toolName: string, succeeded: boolean): void {
     const outcome = succeeded ? "выполнено" : "ошибка";
     this.#output.write(`${this.#paint("muted", `MCP: ${toolName} — ${outcome}`)}\n`);
+  }
+
+  outfitAdvice(markdown: string, path: string): void {
+    this.#block("Совет по одежде", [markdown.trimEnd(), "", this.#paint("muted", `Сохранено: ${path}`)]);
   }
 
   /** Опубликованная сводка планировщика: в терминале worker и в `scheduler summary`. */

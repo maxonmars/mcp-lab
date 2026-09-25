@@ -1,18 +1,21 @@
 import { WeatherApiError, type WeatherApiErrorCode } from "./errors.ts";
 
-export type FetchStage = "geocoding" | "weather";
+export type FetchStage = "geocoding" | "weather" | "forecast";
 
 const NETWORK_ERRORS: Readonly<Record<FetchStage, WeatherApiErrorCode>> = {
   geocoding: "GEOCODING_NETWORK_FAILED",
   weather: "WEATHER_NETWORK_FAILED",
+  forecast: "FORECAST_NETWORK_FAILED",
 };
 const STATUS_ERRORS: Readonly<Record<FetchStage, WeatherApiErrorCode>> = {
   geocoding: "GEOCODING_BAD_STATUS",
   weather: "WEATHER_BAD_STATUS",
+  forecast: "FORECAST_BAD_STATUS",
 };
 const PAYLOAD_ERRORS: Readonly<Record<FetchStage, WeatherApiErrorCode>> = {
   geocoding: "GEOCODING_INVALID_PAYLOAD",
   weather: "WEATHER_INVALID_PAYLOAD",
+  forecast: "FORECAST_INVALID_PAYLOAD",
 };
 
 export async function fetchJson(

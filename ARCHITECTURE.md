@@ -15,6 +15,7 @@ flowchart LR
     App --> LLM[adapters/llm]
     App --> MCP[features/mcp]
     App --> Sched[features/scheduler]
+    App --> Outfit[features/outfit]
     CLI --> Core
     LLM --> Core
     LLM --> DeepSeek[DeepSeek API]
@@ -26,6 +27,9 @@ flowchart LR
     Sched --> LLM
     MCP --> Stdio[stdio]
     Weather --> OpenMeteo[Open-Meteo API]
+    Outfit --> Weather
+    Weather -.outfit-режим.-> DeepSeek
+    Weather -.outfit-режим.-> LatestMd[(.local/outfit/latest.md)]
 ```
 
 Agent инкапсулирует ModelPort и текст системной инструкции. `respond(input, toolSource?)` проверяет
@@ -47,8 +51,8 @@ HTTP-статус при наличии. Текущая модель по умо
 CLI получает реестр обработчиков и потоки, не создаёт агента и не знает SDK.
 Вывод оформляет один CliView из compose.ts: обработчики передают ему типизированные данные реестров,
 ответа и discovery, а цвет решает `styleText` отдельно для stdout и stderr. Перед финальным ответом
-`ask`, если модель вызвала инструмент, CliView печатает одну строку `MCP: <имя инструмента> —
-выполнено`/`— ошибка`; без tool call строки нет.
+`ask` CliView печатает строку `MCP: <имя инструмента> — выполнено`/`— ошибка` на каждый реальный MCP-вызов:
+одну для обычного инструмента, три для фасада совета по одежде; без tool call строк нет.
 Текст из REPL становится вызовом ask; `/команда` и подкоманда CLI используют один dispatch.
 В REPL текст после /ask сохраняется буквально; quoting нужен только оболочке при однократном запуске.
 
@@ -60,12 +64,22 @@ legacy-инициализации (`2025-11-25`) проверяет capability t
 `servers/open-meteo` MCP-процесс, договаривается о ревизии `2026-07-28` (`versionNegotiation.mode =
 "auto"`) и передаёт callback-объект `ToolSource`, использующий тот же Client, в `Agent.respond()`;
 закрывает Client в `finally` независимо от исхода `use`. Обе операции используют настройку
-`mcp.timeoutMs` и собственные типизированные ошибки (`McpDiscoveryError` и `McpToolSourceError`).
+`mcp.timeoutMs` и собственные типизированные ошибки (`McpDiscoveryError` и `McpToolSourceError`);
+`withStdioToolSource` дополнительно принимает `env` дочернего процесса и таймауты вызова по имени инструмента.
 
-`ask` получает инструменты двух серверов сразу: `app/ask.ts` запускает сессию `open-meteo` и публичный режим
-`servers/scheduler` и объединяет их `ToolSource` в `app/toolSources.ts` — вызов направляется по имени инструмента,
-повторяющееся имя отклоняется, лимит одного tool call за реплику по-прежнему держит Agent. Обе сессии
-закрываются вместе, независимо от исхода.
+`ask` получает инструменты двух серверов сразу: `app/ask.ts` запускает сессию `open-meteo` в outfit-режиме и
+публичный режим `servers/scheduler` и объединяет их `ToolSource` в `app/toolSources.ts` — вызов направляется по
+имени инструмента, повторяющееся имя отклоняется, лимит одного tool call за реплику по-прежнему держит Agent.
+Обе сессии закрываются вместе, независимо от исхода. Строки `MCP: …` печатает наблюдатель над каждым серверным
+источником, поэтому они соответствуют реальным MCP-вызовам.
+
+Фича `outfit` (ADR 0005) — пайплайн трёх инструментов одного сервера через одну сессию:
+`get_current_weather` с прогнозом на три часа → `recommend_outfit` (сервер делает один запрос к DeepSeek) →
+`save_outfit_advice` (сервер атомарно заменяет `.local/outfit/latest.md`). Runner вызывает шаги через переданный
+`ToolSource`, передаёт тексты дословно и останавливается на первой ошибке. Команда `outfit` запускает runner
+напрямую. Для `ask` фича даёт проекцию источника Open‑Meteo: внутренние шаги скрыты, вместо них — фасад
+`prepare_outfit_advice`, который для Agent остаётся одним tool call. Ключ и параметры DeepSeek host передаёт
+серверу через `env`, путь файла — аргументом запуска; таймауты длинных шагов задаются по имени инструмента.
 
 Фича `scheduler` (ADR 0004) — фоновая работа без реплики пользователя. `scheduler run` занимает терминал и
 запускает цикл worker в процессе host: `app/scheduler.ts` открывает два постоянных stdio-соединения (`open-meteo`

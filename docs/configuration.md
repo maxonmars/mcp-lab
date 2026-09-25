@@ -14,6 +14,6 @@ YAML содержит плоские ключи с точками. Секрет�
 | llm.maxOutputTokens | number | 1024 | LAB_LLM_MAX_OUTPUT_TOKENS | --llm-max-output-tokens | Максимальное число токенов ответа. |
 | llm.apiKey | string | — | LAB_LLM_API_KEY | — | Ключ DeepSeek; принимается только из env, значение никогда не выводится. |
 | mcp.filesystemRoot | string | docs/demos/fixtures/filesystem | LAB_MCP_FILESYSTEM_ROOT | --mcp-filesystem-root | Путь к учебной папке Filesystem MCP относительно текущего рабочего каталога. |
-| mcp.timeoutMs | number | 10000 | LAB_MCP_TIMEOUT_MS | --mcp-timeout-ms | Таймаут MCP-подключения, получения списка инструментов и вызова инструмента, миллисекунды. |
+| mcp.timeoutMs | number | 10000 | LAB_MCP_TIMEOUT_MS | --mcp-timeout-ms | Таймаут MCP-подключения, получения списка инструментов и вызова инструмента, миллисекунды. Для шагов совета по одежде: get_current_weather — втрое больше, recommend_outfit — вместе с llm.timeoutMs. |
 | scheduler.dbPath | string | .local/scheduler.sqlite | LAB_SCHEDULER_DB_PATH | --scheduler-db-path | Путь к SQLite-базе планировщика относительно текущего рабочего каталога; MCP-серверу передаётся абсолютным. |
 | scheduler.reportsDir | string | .local/reports | LAB_SCHEDULER_REPORTS_DIR | --scheduler-reports-dir | Каталог Markdown-копий последних сводок относительно текущего рабочего каталога; MCP-серверу передаётся абсолютным. |

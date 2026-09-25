@@ -1,3 +1,6 @@
+import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 const processIds = vi.hoisted(() => [] as number[]);
@@ -55,5 +58,47 @@ describe("Open-Meteo MCP по stdio", () => {
     const [pid] = processIds;
     if (pid === undefined) throw new Error("Open-Meteo MCP не предоставил ID дочернего процесса");
     await expectExit(pid);
+  });
+
+  it("в outfit-режиме с env объявляет три инструмента и не создаёт каталог отчёта заранее", async () => {
+    const root = mkdtempSync(join(tmpdir(), "mcp-lab-outfit-process-"));
+    const reportFile = join(root, "outfit", "latest.md");
+    try {
+      const tools = await withStdioToolSource(
+        {
+          command: process.execPath,
+          args: [resolveOpenMeteoEntrypoint(import.meta.url), "--outfit-report-file", reportFile],
+          timeoutMs: 10_000,
+          env: {
+            LAB_LLM_API_KEY: "test-key",
+            LAB_LLM_MODEL: "test-model",
+            LAB_LLM_TIMEOUT_MS: "1000",
+            LAB_LLM_MAX_OUTPUT_TOKENS: "100",
+          },
+        },
+        (source) => source.listTools(),
+      );
+      expect(tools.map((tool) => tool.name).sort()).toEqual([
+        "get_current_weather",
+        "recommend_outfit",
+        "save_outfit_advice",
+      ]);
+      expect(existsSync(join(root, "outfit"))).toBe(false);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("в outfit-режиме без ключа в env сервер не запускается", async () => {
+    await expect(
+      withStdioToolSource(
+        {
+          command: process.execPath,
+          args: [resolveOpenMeteoEntrypoint(import.meta.url), "--outfit-report-file", join(tmpdir(), "latest.md")],
+          timeoutMs: 10_000,
+        },
+        (source) => source.listTools(),
+      ),
+    ).rejects.toMatchObject({ name: "McpToolSourceError" });
   });
 });
