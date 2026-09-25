@@ -80,6 +80,7 @@ vi.mock("@modelcontextprotocol/client/stdio", () => ({ StdioClientTransport: sdk
 import type { ToolSource } from "../../../core/index.ts";
 import { withStdioToolSource } from "../toolSource.ts";
 import type { McpToolSourceError } from "../toolSourceErrors.ts";
+import type { StdioToolSourceOptions } from "../toolSourceTypes.ts";
 
 function resetSdk(): void {
   state.clients.length = 0;
@@ -98,8 +99,8 @@ function resetSdk(): void {
   state.callParams.length = 0;
 }
 
-function run<T>(use: (source: ToolSource) => Promise<T>, timeoutMs = 23) {
-  return withStdioToolSource({ command: "node-for-test", args: ["entry.js"], timeoutMs }, use);
+function run<T>(use: (source: ToolSource) => Promise<T>, timeoutMs = 23, extra: Partial<StdioToolSourceOptions> = {}) {
+  return withStdioToolSource({ command: "node-for-test", args: ["entry.js"], timeoutMs, ...extra }, use);
 }
 
 async function expectError(
@@ -135,6 +136,33 @@ describe("withStdioToolSource", () => {
     await run((source) => source.callTool({ name: "get_current_weather", arguments: { location: "Омск" } }));
     expect(state.callParams).toEqual([{ name: "get_current_weather", arguments: { location: "Омск" } }]);
     expect(state.callOptions).toEqual([{ timeout: 23 }]);
+  });
+
+  it("без env не передаёт окружение в транспорт, с env — передаёт только заданные переменные", async () => {
+    resetSdk();
+    await run((source) => source.listTools());
+    expect((state.transports[0] as { params: object }).params).not.toHaveProperty("env");
+    await run((source) => source.listTools(), 23, { env: { LAB_LLM_API_KEY: "key" } });
+    expect((state.transports[1] as { params: unknown }).params).toMatchObject({ env: { LAB_LLM_API_KEY: "key" } });
+  });
+
+  it("таймаут вызова берётся по имени инструмента, остальное — на общем таймауте", async () => {
+    resetSdk();
+    const callTimeoutsMs = { recommend_outfit: 500, get_current_weather: 70 };
+    await run(
+      async (source) => {
+        await source.listTools();
+        await source.callTool({ name: "recommend_outfit", arguments: {} });
+        await source.callTool({ name: "get_current_weather", arguments: {} });
+        await source.callTool({ name: "save_outfit_advice", arguments: {} });
+        await source.callTool({ name: "toString", arguments: {} });
+      },
+      23,
+      { callTimeoutsMs },
+    );
+    expect(state.connectOptions).toEqual([{ timeout: 23 }]);
+    expect(state.listOptions).toEqual([{ timeout: 23 }]);
+    expect(state.callOptions).toEqual([{ timeout: 500 }, { timeout: 70 }, { timeout: 23 }, { timeout: 23 }]);
   });
 
   it("сохраняет isError результата", async () => {

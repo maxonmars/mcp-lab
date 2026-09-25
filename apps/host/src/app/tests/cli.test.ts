@@ -215,7 +215,7 @@ describe("CLI и REPL", () => {
     const result = await invoke([], { input: "Вопрос\n/exit\n", terminal: { interactive: true } });
     expect(result.output.match(/── mcp-lab ──/g)).toHaveLength(1);
     expect(result.output).toContain(
-      "/ask · /help · /config show · /mcp tools · /scheduler run · /scheduler summary · /exit",
+      "/ask · /help · /config show · /mcp tools · /outfit · /scheduler run · /scheduler summary · /exit",
     );
     expect(result.output.match(/mcp-lab > /g)).toHaveLength(2);
     expect(result.output.indexOf("── mcp-lab ──")).toBeLessThan(result.output.indexOf("mcp-lab > "));

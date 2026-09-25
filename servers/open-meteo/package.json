@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@modelcontextprotocol/server": "2.0.0",
+    "openai": "7.10.0",
     "zod": "4.5.4"
   },
   "devDependencies": {

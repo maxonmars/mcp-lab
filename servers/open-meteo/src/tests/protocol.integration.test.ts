@@ -49,7 +49,9 @@ afterEach(async () => {
 /** serveStdio (а не McpServer.connect напрямую) — единственное место, где сервер понимает modern-probe. */
 async function connectedClient(fetchImpl: typeof fetch): Promise<Client> {
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
-  handle = serveStdio(() => createWeatherServer({ fetchImpl, timeoutMs: 1000 }), { transport: serverTransport });
+  handle = serveStdio(() => createWeatherServer({ fetchImpl, timeoutMs: 1000, now: () => 0 }), {
+    transport: serverTransport,
+  });
   const created = new Client({ name: "test-client", version: "0.0.0" }, { versionNegotiation: { mode: "auto" } });
   await created.connect(clientTransport);
   client = created;
@@ -61,6 +63,12 @@ describe("Open-Meteo MCP server: протокольная интеграция",
     const created = await connectedClient(fakeFetch());
     expect(created.getProtocolEra()).toBe("modern");
     expect(created.getServerCapabilities()?.tools).toBeTruthy();
+  });
+
+  it("обычный режим объявляет ровно один инструмент", async () => {
+    const created = await connectedClient(fakeFetch());
+    const { tools } = await created.listTools();
+    expect(tools.map((tool) => tool.name)).toEqual([GET_CURRENT_WEATHER_TOOL_NAME]);
   });
 
   it("listTools возвращает get_current_weather с описанием и полной input/output схемой", async () => {

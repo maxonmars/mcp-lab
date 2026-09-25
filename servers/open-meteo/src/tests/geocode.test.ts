@@ -7,7 +7,7 @@ function jsonResponse(body: unknown, status = 200): Response {
 }
 
 function deps(fetchImpl: typeof fetch): WeatherDependencies {
-  return { fetchImpl, timeoutMs: 1000 };
+  return { fetchImpl, timeoutMs: 1000, now: () => 0 };
 }
 
 const validResult = {

@@ -19,6 +19,10 @@ const inputSchema = z.object({
     .min(2)
     .max(100)
     .describe("Город и необязательная страна или регион, например «Новосибирск, Россия»."),
+  includeNextHours: z
+    .boolean()
+    .optional()
+    .describe("true — добавить прогноз на три ближайших почасовых интервала после текущего наблюдения."),
 });
 
 export function registerWeatherTool(server: McpServer, deps: WeatherDependencies): void {
@@ -30,9 +34,9 @@ export function registerWeatherTool(server: McpServer, deps: WeatherDependencies
       outputSchema: weatherSnapshotSchema,
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
     },
-    async ({ location }) => {
+    async ({ location, includeNextHours }) => {
       try {
-        const snapshot = await getCurrentWeather(location, deps);
+        const snapshot = await getCurrentWeather(location, deps, { includeNextHours });
         return { content: [{ type: "text" as const, text: formatWeatherText(snapshot) }], structuredContent: snapshot };
       } catch (error) {
         return { isError: true, content: [{ type: "text" as const, text: describeWeatherError(error) }] };

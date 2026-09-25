@@ -9,10 +9,25 @@ type CommandContext = {
   ask: (text: string) => Promise<string>;
   config: () => readonly ConfigRow[];
   mcpTools: () => Promise<McpDiscoveryResult>;
+  outfit: (city: string) => Promise<{ markdown: string; path: string }>;
   schedulerRun: () => Promise<void>;
   schedulerSummary: (target: string) => Promise<{ city: string; markdown: string }>;
   view: CommandView;
 };
+
+function outfitCommand(context: CommandContext): Command {
+  return {
+    name: "outfit",
+    arguments: ["<город...>"],
+    missingArgument: "Не указан город.",
+    description: descriptions.outfit ?? "",
+    run: async (args) => {
+      const advice = await context.outfit(args.join(" "));
+      context.view.outfitAdvice(advice.markdown, advice.path);
+      return "continue";
+    },
+  };
+}
 
 function schedulerCommands(context: CommandContext): Command[] {
   return [
@@ -81,6 +96,7 @@ export function createCommands(context: CommandContext): readonly Command[] {
         return "continue";
       },
     },
+    outfitCommand(context),
     ...schedulerCommands(context),
     {
       name: "exit",

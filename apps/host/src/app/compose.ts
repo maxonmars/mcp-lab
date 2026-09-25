@@ -19,6 +19,7 @@ import type {
 import { createAskHandler, type WithToolSource } from "./ask.ts";
 import { createCommands } from "./commands.ts";
 import { parseOptions, type ResolvedConfig, resolveConfig, showConfig } from "./config.ts";
+import { createOutfitHandler } from "./outfit.ts";
 import { createSchedulerHandlers, type Interrupt } from "./scheduler.ts";
 
 const neverInterrupted: Interrupt = () => ({ signal: new AbortController().signal, release: () => {} });
@@ -49,15 +50,19 @@ export async function run(options: RunOptions): Promise<number> {
   const view = new CliView(options.terminal.output, options.terminal.error);
   const createModel = options.createModel ?? ((settings: DeepSeekOptions) => new DeepSeekModel(settings));
   const getConfig = () => config;
-  const ask = createAskHandler({
+  const weatherHandlerOptions = {
     cwd: options.cwd,
     nodeExecutable: options.nodeExecutable,
-    createModel,
     withWeatherToolSource: options.withWeatherToolSource ?? withStdioToolSource,
-    withSchedulerToolSource: options.withSchedulerToolSource ?? withStdioToolSource,
     view,
     getConfig,
+  };
+  const ask = createAskHandler({
+    ...weatherHandlerOptions,
+    createModel,
+    withSchedulerToolSource: options.withSchedulerToolSource ?? withStdioToolSource,
   });
+  const outfit = createOutfitHandler(weatherHandlerOptions);
   const scheduler = createSchedulerHandlers({
     cwd: options.cwd,
     nodeExecutable: options.nodeExecutable,
@@ -80,6 +85,7 @@ export async function run(options: RunOptions): Promise<number> {
         nodeExecutable: options.nodeExecutable,
       });
     },
+    outfit,
     schedulerRun: scheduler.run,
     schedulerSummary: scheduler.summary,
     view,
