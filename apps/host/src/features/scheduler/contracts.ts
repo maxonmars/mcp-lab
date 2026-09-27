@@ -4,7 +4,13 @@ export type Clock = Readonly<{
   sleep(ms: number, signal: AbortSignal): Promise<void>;
 }>;
 
-export type DueTask = Readonly<{ scheduleId: string; city: string; collectDue: boolean; summaryDue: boolean }>;
+export type DueTask = Readonly<{
+  scheduleId: string;
+  city: string;
+  collectDue: boolean;
+  summaryDue: boolean;
+  summaryMode?: "daily";
+}>;
 export type DueTasks = Readonly<{ tasks: readonly DueTask[]; nextDueAtMs: number | null }>;
 
 export type Observation = Readonly<{

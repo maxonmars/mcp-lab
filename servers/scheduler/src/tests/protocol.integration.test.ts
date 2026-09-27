@@ -39,11 +39,16 @@ async function schedule(connected: Client, city = "Новосибирск") {
 }
 
 describe("публичный режим", () => {
-  it("предоставляет только три публичных инструмента и не показывает служебные", async () => {
+  it("предоставляет только публичные инструменты и не показывает служебные", async () => {
     harness = createHarness();
     const connected = await connect("public");
     expect(connected.getProtocolEra()).toBe("modern");
-    expect(await toolNames(connected)).toEqual(["cancel_weather_schedule", "get_weather_summary", "schedule_weather"]);
+    expect(await toolNames(connected)).toEqual([
+      "cancel_weather_schedule",
+      "get_weather_summary",
+      "schedule_daily_weather_summary",
+      "schedule_weather",
+    ]);
     await expect(connected.callTool({ name: "worker_start", arguments: {} })).rejects.toThrow(/not found/);
   });
 
@@ -70,6 +75,63 @@ describe("публичный режим", () => {
       arguments: { city: "Омск", collectEverySeconds: 1, summaryEverySeconds: 60 },
     });
     expect(result.isError).toBe(true);
+  });
+
+  it("создаёт ежедневное расписание на 18:00 и находит его через get_weather_summary", async () => {
+    harness = createHarness();
+    const connected = await connect("public");
+    const result = await connected.callTool({
+      name: "schedule_daily_weather_summary",
+      arguments: {
+        city: "Новосибирск",
+        collectEverySeconds: 900,
+        summaryAtLocalTime: "18:00",
+        timeZone: "Asia/Novosibirsk",
+      },
+    });
+    expect(result.isError).not.toBe(true);
+    expect(result.structuredContent).toEqual({
+      scheduleId: "sch_00000001",
+      city: "Новосибирск",
+      collectEverySeconds: 900,
+      summaryAtLocalTime: "18:00",
+      timeZone: "Asia/Novosibirsk",
+      nextCollectAt: new Date(T0 + 900_000).toISOString(),
+      nextSummaryAt: "2026-09-24T11:00:00.000Z",
+    });
+    const found = await connected.callTool({ name: "get_weather_summary", arguments: { city: "Новосибирск" } });
+    expect(found.structuredContent).toMatchObject({
+      status: "no_summary",
+      scheduleId: "sch_00000001",
+      nextSummaryAt: "2026-09-24T11:00:00.000Z",
+    });
+    const missing = await connected.callTool({ name: "get_weather_summary", arguments: { city: "Омск" } });
+    expect(missing.structuredContent).toMatchObject({
+      status: "not_found",
+      candidates: [{ scheduleId: "sch_00000001", summaryAtLocalTime: "18:00", timeZone: "Asia/Novosibirsk" }],
+    });
+    expect(missing.content).toEqual([
+      { type: "text", text: expect.stringContaining("сводка ежедневно в 18:00 (Asia/Novosibirsk)") },
+    ]);
+  });
+
+  it("отклоняет неверное местное время и неизвестный часовой пояс", async () => {
+    harness = createHarness();
+    const connected = await connect("public");
+    const arguments_ = {
+      city: "Новосибирск",
+      collectEverySeconds: 900,
+      summaryAtLocalTime: "18:00",
+      timeZone: "Asia/Novosibirsk",
+    };
+    for (const invalid of [
+      { ...arguments_, summaryAtLocalTime: "24:00" },
+      { ...arguments_, timeZone: "Novosibirsk" },
+      { ...arguments_, timeZone: "+07:00" },
+    ]) {
+      const result = await connected.callTool({ name: "schedule_daily_weather_summary", arguments: invalid });
+      expect(result.isError).toBe(true);
+    }
   });
 
   it("get_weather_summary: нет сводки, неоднозначный город, отсутствие и неверные параметры", async () => {
@@ -169,6 +231,28 @@ describe("режим worker", () => {
     });
     const second = harness.open();
     expect(second.startWorker()).toBe("already_running");
+  });
+
+  it("worker_get_due помечает только ежедневные задачи", async () => {
+    harness = createHarness();
+    const setup = harness.open();
+    setup.createDailySchedule({
+      city: "Новосибирск",
+      collectEverySeconds: 900,
+      summaryAtLocalTime: "18:00",
+      timeZone: "Asia/Novosibirsk",
+    });
+    setup.createSchedule({ city: "Томск", collectEverySeconds: 900, summaryEverySeconds: 3600 });
+    const connected = await connect("worker");
+    await connected.callTool({ name: "worker_start", arguments: {} });
+    const due = await connected.callTool({ name: "worker_get_due", arguments: { nowMs: T0 + 3_600_000 } });
+    expect(due.structuredContent).toEqual({
+      tasks: [
+        { scheduleId: "sch_00000001", city: "Новосибирск", collectDue: true, summaryDue: true, summaryMode: "daily" },
+        { scheduleId: "sch_00000002", city: "Томск", collectDue: true, summaryDue: true },
+      ],
+      nextDueAtMs: T0 + 900_000,
+    });
   });
 
   it("полный цикл: due → опрос → история → публикация → ошибка публикации", async () => {

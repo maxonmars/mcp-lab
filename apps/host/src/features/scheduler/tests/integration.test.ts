@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
+import { Agent } from "../../../core/index.ts";
 import { type Connect, connectStdio, type McpCaller } from "../mcp.ts";
 import { schedulerServerArgs } from "../serverArgs.ts";
 import { readSchedulerSummary } from "../summaryReader.ts";
@@ -72,7 +73,10 @@ async function work(cfg: Config, model: FakeModel, startAt: number, seconds: num
   const clock = new FakeClock(startAt, startAt + seconds * SECOND, () => controller.abort());
   const events = recordingEvents([]);
   try {
-    await runWorker({ ...session, model, clock, events, systemPrompt: "SYSTEM" }, controller.signal);
+    await runWorker(
+      { ...session, model, dailyAgent: new Agent(model, "DAILY"), clock, events, systemPrompt: "SYSTEM" },
+      controller.signal,
+    );
   } finally {
     await session.close();
   }

@@ -18,11 +18,13 @@ import {
 import { insertSummary, latestSummary } from "../store/summaries.ts";
 import type { PollHistoryRow, ScheduleRow } from "../store/types.ts";
 import { WorkerLock } from "../store/workerLock.ts";
+import { firstDailyDeadline, followingDailyDeadline } from "./dailyTime.ts";
 import { nextDeadline } from "./deadlines.ts";
 import { ServiceError } from "./errors.ts";
 import type {
   CancelOutcome,
   DueTasks,
+  NewDailySchedule,
   NewSchedule,
   PollInput,
   PollOutcome,
@@ -38,6 +40,17 @@ import type {
 export const MAX_KNOWN_SCHEDULES = 10;
 
 export const LOCATION_CHANGED_ERROR = "Геокодирование вернуло другую точку, чем при первом опросе.";
+
+// Столбец v1 остаётся NOT NULL; для ежедневного режима его значение не участвует в расчёте сроков.
+const DAILY_SUMMARY_LEGACY_SECONDS = 86_400;
+
+function nextSummaryDeadline(schedule: ScheduleRow, startedAtMs: number): number {
+  if (schedule.summaryMode === "interval") {
+    return nextDeadline(schedule.nextSummaryAtMs, schedule.summaryEverySeconds, startedAtMs);
+  }
+  if (schedule.summaryAtLocalTime === null || schedule.timeZone === null) throw new Error("DAILY_SCHEDULE_INCOMPLETE");
+  return followingDailyDeadline(startedAtMs, schedule.summaryAtLocalTime, schedule.timeZone);
+}
 
 /** База открывается при первом обращении: пробный процесс согласования версии MCP не трогает файлы. */
 export class SchedulerService {
@@ -63,9 +76,33 @@ export class SchedulerService {
       cityKey: cityKey(city),
       collectEverySeconds: input.collectEverySeconds,
       summaryEverySeconds: input.summaryEverySeconds,
+      summaryMode: "interval" as const,
+      summaryAtLocalTime: null,
+      timeZone: null,
       createdAtMs: now,
       nextCollectAtMs: now + input.collectEverySeconds * 1000,
       nextSummaryAtMs: now + input.summaryEverySeconds * 1000,
+    };
+    const db = this.#database;
+    inTransaction(db, () => insertSchedule(db, row));
+    return { ...row, latitude: null, longitude: null, locationName: null, cancelledAtMs: null, lastSummaryError: null };
+  }
+
+  createDailySchedule(input: NewDailySchedule): ScheduleRow {
+    const now = this.#deps.now();
+    const city = input.city.trim().replaceAll(/\s+/g, " ");
+    const row = {
+      id: this.#deps.newId(),
+      city,
+      cityKey: cityKey(city),
+      collectEverySeconds: input.collectEverySeconds,
+      summaryEverySeconds: DAILY_SUMMARY_LEGACY_SECONDS,
+      summaryMode: "daily" as const,
+      summaryAtLocalTime: input.summaryAtLocalTime,
+      timeZone: input.timeZone,
+      createdAtMs: now,
+      nextCollectAtMs: now + input.collectEverySeconds * 1000,
+      nextSummaryAtMs: firstDailyDeadline(now, input.summaryAtLocalTime, input.timeZone),
     };
     const db = this.#database;
     inTransaction(db, () => insertSchedule(db, row));
@@ -115,6 +152,7 @@ export class SchedulerService {
         city: row.city,
         collectDue: row.nextCollectAtMs <= nowMs,
         summaryDue: row.nextSummaryAtMs <= nowMs,
+        ...(row.summaryMode === "daily" ? { summaryMode: "daily" as const } : {}),
       }))
       .filter((task) => task.collectDue || task.summaryDue);
     const deadlines = active.flatMap((row) => [row.nextCollectAtMs, row.nextSummaryAtMs]);
@@ -166,11 +204,7 @@ export class SchedulerService {
         uniqueObservations: input.uniqueObservations,
         markdown: input.markdown,
       });
-      setNextSummary(
-        db,
-        schedule.id,
-        nextDeadline(schedule.nextSummaryAtMs, schedule.summaryEverySeconds, input.startedAtMs),
-      );
+      setNextSummary(db, schedule.id, nextSummaryDeadline(schedule, input.startedAtMs));
       setSummaryError(db, schedule.id, null, null);
     });
     return { fileSynced: syncReportFile(reportPath(this.#deps.reportsDir, input.scheduleId), input.markdown) };
@@ -183,11 +217,7 @@ export class SchedulerService {
     inTransaction(db, () => {
       const schedule = this.#requireSchedule(db, input.scheduleId);
       setSummaryError(db, schedule.id, input.reason, this.#deps.now());
-      setNextSummary(
-        db,
-        schedule.id,
-        nextDeadline(schedule.nextSummaryAtMs, schedule.summaryEverySeconds, input.startedAtMs),
-      );
+      setNextSummary(db, schedule.id, nextSummaryDeadline(schedule, input.startedAtMs));
     });
   }
 

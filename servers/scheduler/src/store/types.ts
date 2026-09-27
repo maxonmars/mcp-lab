@@ -4,6 +4,9 @@ export type ScheduleRow = Readonly<{
   cityKey: string;
   collectEverySeconds: number;
   summaryEverySeconds: number;
+  summaryMode: "interval" | "daily";
+  summaryAtLocalTime: string | null;
+  timeZone: string | null;
   createdAtMs: number;
   nextCollectAtMs: number;
   nextSummaryAtMs: number;

@@ -8,7 +8,8 @@ CLAUDE.md, src/index.ts, src/app/main.ts, tsconfig.build.json и собстве�
   ревизия `2026-07-28`. Режим `--outfit-report-file` добавляет `recommend_outfit` и `save_outfit_advice`
   (ADR 0005).
 - [`scheduler`](scheduler/README.md) — расписания погоды, результаты опросов и опубликованные сводки в SQLite;
-  публичные инструменты `schedule_weather`, `get_weather_summary`, `cancel_weather_schedule` и отдельный режим
+  публичные инструменты `schedule_weather`, `schedule_daily_weather_summary`, `get_weather_summary`,
+  `cancel_weather_schedule` и отдельный режим
   `--worker` со служебными операциями (ADR 0004).
 
 Host использует `open-meteo` в outfit-режиме и публичный режим `scheduler` как `ToolSource` на каждый `ask`,

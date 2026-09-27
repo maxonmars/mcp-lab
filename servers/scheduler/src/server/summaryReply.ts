@@ -6,7 +6,10 @@ const state = (row: ScheduleRow) => (row.cancelledAtMs === null ? ("active" as c
 
 function describeSchedule(row: ScheduleRow): string {
   const status = state(row) === "active" ? "активно" : "отменено";
-  const cadence = `опрос каждые ${row.collectEverySeconds} с, сводка каждые ${row.summaryEverySeconds} с`;
+  const cadence =
+    row.summaryMode === "daily"
+      ? `опрос каждые ${row.collectEverySeconds} с, сводка ежедневно в ${row.summaryAtLocalTime} (${row.timeZone})`
+      : `опрос каждые ${row.collectEverySeconds} с, сводка каждые ${row.summaryEverySeconds} с`;
   return `${row.id}: ${row.city}, ${cadence}, ${status}`;
 }
 
@@ -15,7 +18,9 @@ function toCandidates(candidates: readonly SummaryCandidate[]) {
     scheduleId: schedule.id,
     city: schedule.city,
     collectEverySeconds: schedule.collectEverySeconds,
-    summaryEverySeconds: schedule.summaryEverySeconds,
+    ...(schedule.summaryMode === "daily"
+      ? { summaryAtLocalTime: schedule.summaryAtLocalTime, timeZone: schedule.timeZone }
+      : { summaryEverySeconds: schedule.summaryEverySeconds }),
     scheduleStatus: state(schedule),
     ...(publishedAtMs === null ? {} : { lastPublishedAt: isoTime(publishedAtMs) }),
   }));

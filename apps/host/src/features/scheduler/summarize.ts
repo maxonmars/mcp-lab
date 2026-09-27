@@ -15,9 +15,11 @@ export type SummaryDeps = Readonly<{
   systemPrompt: string;
 }>;
 
+type PublicationDeps = Pick<SummaryDeps, "scheduler" | "clock" | "events">;
+
 type Generated = Readonly<{ ok: true; text: string }> | Readonly<{ ok: false; reason: string }>;
 
-function describeModelFailure(error: unknown): string {
+export function describeModelFailure(error: unknown): string {
   if (!(error instanceof AgentError)) return "Запрос к модели завершился ошибкой.";
   const status = error.data.status === undefined ? "" : ` (HTTP ${error.data.status})`;
   return `Ошибка модели: ${error.code}${status}.`;
@@ -48,21 +50,40 @@ export async function summarize(deps: SummaryDeps, task: { scheduleId: string; c
   const agg = aggregate(history, periodStartMs, startedAtMs);
   const generated = await generate(deps, task.city, agg);
   if (!generated.ok) {
-    await deps.scheduler.recordSummaryFailure({ scheduleId: task.scheduleId, startedAtMs, reason: generated.reason });
-    deps.events.summaryFailed({ scheduleId: task.scheduleId, city: task.city, reason: generated.reason });
+    await failSummary(deps, task, startedAtMs, generated.reason);
     return;
   }
+  await publishSummary(deps, task, startedAtMs, agg, generated.text);
+}
+
+export async function failSummary(
+  deps: PublicationDeps,
+  task: { scheduleId: string; city: string },
+  startedAtMs: number,
+  reason: string,
+): Promise<void> {
+  await deps.scheduler.recordSummaryFailure({ scheduleId: task.scheduleId, startedAtMs, reason });
+  deps.events.summaryFailed({ scheduleId: task.scheduleId, city: task.city, reason });
+}
+
+export async function publishSummary(
+  deps: PublicationDeps,
+  task: { scheduleId: string; city: string },
+  startedAtMs: number,
+  agg: Aggregate,
+  modelText: string,
+): Promise<void> {
   const markdown = assembleReport({
     scheduleId: task.scheduleId,
     city: task.city,
     aggregate: agg,
-    modelText: generated.text,
+    modelText,
     generatedAtMs: deps.clock.now(),
   });
   const { fileSynced } = await deps.scheduler.publishSummary({
     scheduleId: task.scheduleId,
     startedAtMs,
-    periodStartMs,
+    periodStartMs: agg.periodStartMs,
     periodEndMs: startedAtMs,
     uniqueObservations: agg.observations.length,
     markdown,

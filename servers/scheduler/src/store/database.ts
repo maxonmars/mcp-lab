@@ -3,7 +3,7 @@ import { dirname } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 
 export const BUSY_TIMEOUT_MS = 5_000;
-const SCHEMA_VERSION = 1;
+const SCHEMA_VERSION = 2;
 
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS schedules (
@@ -12,6 +12,9 @@ CREATE TABLE IF NOT EXISTS schedules (
   city_key TEXT NOT NULL,
   collect_every_seconds INTEGER NOT NULL,
   summary_every_seconds INTEGER NOT NULL,
+  summary_mode TEXT NOT NULL DEFAULT 'interval' CHECK (summary_mode IN ('interval', 'daily')),
+  summary_at_local_time TEXT,
+  time_zone TEXT,
   created_at_ms INTEGER NOT NULL,
   next_collect_at_ms INTEGER NOT NULL,
   next_summary_at_ms INTEGER NOT NULL,
@@ -62,8 +65,16 @@ export function openDatabase(path: string): DatabaseSync {
   inTransaction(db, () => {
     const version = Number(db.prepare("PRAGMA user_version").get()?.user_version ?? 0);
     if (version > SCHEMA_VERSION) throw new Error("SCHEMA_TOO_NEW");
+    if (version === 0) db.exec(SCHEMA);
+    if (version === 1) {
+      db.exec(`
+        ALTER TABLE schedules ADD COLUMN summary_mode TEXT NOT NULL DEFAULT 'interval'
+          CHECK (summary_mode IN ('interval', 'daily'));
+        ALTER TABLE schedules ADD COLUMN summary_at_local_time TEXT;
+        ALTER TABLE schedules ADD COLUMN time_zone TEXT;
+      `);
+    }
     if (version < SCHEMA_VERSION) {
-      db.exec(SCHEMA);
       db.exec(`PRAGMA user_version = ${SCHEMA_VERSION}`);
     }
   });

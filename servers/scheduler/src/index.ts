@@ -2,6 +2,7 @@ export { createSchedulerServer, type SchedulerMode, SERVER_NAME, SERVER_VERSION 
 export {
   CANCEL_WEATHER_SCHEDULE_TOOL_NAME,
   GET_WEATHER_SUMMARY_TOOL_NAME,
+  SCHEDULE_DAILY_WEATHER_SUMMARY_TOOL_NAME,
   SCHEDULE_WEATHER_TOOL_NAME,
 } from "./server/publicTools.ts";
 export { WORKER_TOOL_NAMES } from "./server/workerTools.ts";

@@ -1,4 +1,4 @@
-import type { ModelCompletion, ModelPort, ModelRequest } from "../../../core/index.ts";
+import { Agent, type ModelCompletion, type ModelPort, type ModelRequest } from "../../../core/index.ts";
 import type {
   Clock,
   DueTasks,
@@ -50,6 +50,7 @@ type FakeSchedule = {
   summaryEverySeconds: number;
   nextCollectAtMs: number;
   nextSummaryAtMs: number;
+  summaryMode?: "daily";
 };
 
 /** Как на сервере: своевременный запуск сохраняет сетку, опоздание больше секунды — отсчёт от запуска. */
@@ -79,6 +80,14 @@ export class FakeScheduler implements SchedulerPort {
     return id;
   }
 
+  addDailySchedule(createdAtMs: number, collectEverySeconds: number, summaryAtMs: number): string {
+    const id = this.addSchedule(createdAtMs, collectEverySeconds, 24 * 3600);
+    const schedule = this.#schedule(id);
+    schedule.summaryMode = "daily";
+    schedule.nextSummaryAtMs = summaryAtMs;
+    return id;
+  }
+
   async start(): Promise<void> {
     if (this.alreadyRunning) throw new SchedulerError("WORKER_ALREADY_RUNNING", "scheduler");
     this.log.push("start");
@@ -92,6 +101,7 @@ export class FakeScheduler implements SchedulerPort {
         city: s.city,
         collectDue: s.nextCollectAtMs <= nowMs,
         summaryDue: s.nextSummaryAtMs <= nowMs,
+        ...(s.summaryMode ? { summaryMode: s.summaryMode } : {}),
       }))
       .filter((task) => task.collectDue || task.summaryDue);
     const deadlines = this.schedules.flatMap((s) => [s.nextCollectAtMs, s.nextSummaryAtMs]);
@@ -257,6 +267,17 @@ export async function runScenario(options: ScenarioOptions) {
   const controller = new AbortController();
   const clock = new FakeClock(options.startAt ?? T0, options.endAt, () => controller.abort());
   const events = recordingEvents(scheduler.log);
-  await runWorker({ scheduler, weather, model, clock, events, systemPrompt: "SYSTEM-PROMPT" }, controller.signal);
+  await runWorker(
+    {
+      scheduler,
+      weather,
+      model,
+      dailyAgent: new Agent(model, "DAILY-SYSTEM-PROMPT"),
+      clock,
+      events,
+      systemPrompt: "SYSTEM-PROMPT",
+    },
+    controller.signal,
+  );
   return { scheduler, weather, model, clock, events };
 }

@@ -12,7 +12,9 @@ const candidate = z.object({
   scheduleId: z.string(),
   city: z.string(),
   collectEverySeconds: z.number(),
-  summaryEverySeconds: z.number(),
+  summaryEverySeconds: z.number().optional(),
+  summaryAtLocalTime: z.string().optional(),
+  timeZone: z.string().optional(),
   scheduleStatus,
   lastPublishedAt: z.string().optional(),
 });

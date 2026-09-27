@@ -38,7 +38,13 @@ function registerLifecycleTools(server: McpServer, service: SchedulerService): v
       inputSchema: z.object({ nowMs: timestamp }),
       outputSchema: z.object({
         tasks: z.array(
-          z.object({ scheduleId: z.string(), city: z.string(), collectDue: z.boolean(), summaryDue: z.boolean() }),
+          z.object({
+            scheduleId: z.string(),
+            city: z.string(),
+            collectDue: z.boolean(),
+            summaryDue: z.boolean(),
+            summaryMode: z.literal("daily").optional(),
+          }),
         ),
         nextDueAtMs: z.number().nullable(),
       }),

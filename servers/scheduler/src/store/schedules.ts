@@ -3,7 +3,8 @@ import type { ScheduleRow } from "./types.ts";
 
 type Raw = Record<string, unknown>;
 
-const COLUMNS = `id, city, city_key, collect_every_seconds, summary_every_seconds, created_at_ms,
+const COLUMNS = `id, city, city_key, collect_every_seconds, summary_every_seconds, summary_mode,
+  summary_at_local_time, time_zone, created_at_ms,
   next_collect_at_ms, next_summary_at_ms, latitude, longitude, location_name, cancelled_at_ms, last_summary_error`;
 
 function toSchedule(raw: Raw): ScheduleRow {
@@ -13,6 +14,9 @@ function toSchedule(raw: Raw): ScheduleRow {
     cityKey: raw.city_key as string,
     collectEverySeconds: raw.collect_every_seconds as number,
     summaryEverySeconds: raw.summary_every_seconds as number,
+    summaryMode: raw.summary_mode as ScheduleRow["summaryMode"],
+    summaryAtLocalTime: raw.summary_at_local_time as string | null,
+    timeZone: raw.time_zone as string | null,
     createdAtMs: raw.created_at_ms as number,
     nextCollectAtMs: raw.next_collect_at_ms as number,
     nextSummaryAtMs: raw.next_summary_at_ms as number,
@@ -39,14 +43,18 @@ export function insertSchedule(
   row: Omit<ScheduleRow, "latitude" | "longitude" | "locationName" | "cancelledAtMs" | "lastSummaryError">,
 ): void {
   db.prepare(
-    `INSERT INTO schedules (id, city, city_key, collect_every_seconds, summary_every_seconds, created_at_ms,
-       next_collect_at_ms, next_summary_at_ms) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO schedules (id, city, city_key, collect_every_seconds, summary_every_seconds, summary_mode,
+       summary_at_local_time, time_zone, created_at_ms, next_collect_at_ms, next_summary_at_ms)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(
     row.id,
     row.city,
     row.cityKey,
     row.collectEverySeconds,
     row.summaryEverySeconds,
+    row.summaryMode,
+    row.summaryAtLocalTime,
+    row.timeZone,
     row.createdAtMs,
     row.nextCollectAtMs,
     row.nextSummaryAtMs,
