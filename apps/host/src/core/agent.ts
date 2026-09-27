@@ -2,15 +2,27 @@ import { AgentError } from "./errors.ts";
 import type { Message, ModelPort } from "./model.ts";
 import type { ToolCall, ToolDefinition, ToolSource } from "./tool.ts";
 
-const MAX_TOOL_CALLS_PER_TURN = 1;
+const DEFAULT_MAX_TOOL_CALLS_PER_TURN = 1;
+
+export type AgentOptions = Readonly<{ maxToolCalls?: number }>;
+
+function requireMaxToolCalls(maxToolCalls: number | undefined): number {
+  if (maxToolCalls === undefined) return DEFAULT_MAX_TOOL_CALLS_PER_TURN;
+  if (!Number.isSafeInteger(maxToolCalls) || maxToolCalls <= 0) {
+    throw new RangeError("maxToolCalls должен быть положительным целым числом.");
+  }
+  return maxToolCalls;
+}
 
 export class Agent {
   readonly #model: ModelPort;
   readonly #systemPrompt: string;
+  readonly #maxToolCalls: number;
 
-  constructor(model: ModelPort, systemPrompt: string) {
+  constructor(model: ModelPort, systemPrompt: string, options: AgentOptions = {}) {
     this.#model = model;
     this.#systemPrompt = systemPrompt;
+    this.#maxToolCalls = requireMaxToolCalls(options.maxToolCalls);
   }
 
   async respond(input: string, toolSource?: ToolSource): Promise<string> {
@@ -18,30 +30,28 @@ export class Agent {
     if (!question) throw new AgentError("EMPTY_INPUT");
 
     const tools = toolSource ? await toolSource.listTools() : [];
-    const systemMessage: Message = { role: "system", content: this.#systemPrompt };
-    const userMessage: Message = { role: "user", content: question };
-    const first = await this.#model.complete({
-      messages: [systemMessage, userMessage],
-      tools,
-      toolChoice: tools.length > 0 ? "auto" : "none",
-    });
-    if (first.type === "text") return requireText(first.content);
+    const messages: Message[] = [
+      { role: "system", content: this.#systemPrompt },
+      { role: "user", content: question },
+    ];
+    let used = 0;
+    for (;;) {
+      const completion = await this.#model.complete({
+        messages: [...messages],
+        tools,
+        toolChoice: tools.length > 0 && used < this.#maxToolCalls ? "auto" : "none",
+      });
+      if (completion.type === "text") return requireText(completion.content);
 
-    const call = requireSingleCall(first.calls);
-    requireKnownTool(tools, call.name);
-    requireValidArguments(call);
-    // tools непусты только когда передан toolSource, поэтому вызов ниже безопасен.
-    const result = await (toolSource as ToolSource).callTool({ name: call.name, arguments: call.arguments });
-
-    const assistantMessage: Message = { role: "assistant", content: first.content, toolCalls: [call] };
-    const toolMessage: Message = { role: "tool", toolCallId: call.id, content: result.content };
-    const second = await this.#model.complete({
-      messages: [systemMessage, userMessage, assistantMessage, toolMessage],
-      tools,
-      toolChoice: "none",
-    });
-    if (second.type === "tool_calls") throw new AgentError("TOOL_CALL_LIMIT_EXCEEDED");
-    return requireText(second.content);
+      requireExecutable(completion.calls, tools, used, this.#maxToolCalls);
+      messages.push({ role: "assistant", content: completion.content, toolCalls: completion.calls });
+      for (const call of completion.calls) {
+        // Источник — MCP-сессия: параллельные вызовы делят один stdio-транспорт, поэтому строго по порядку.
+        const result = await (toolSource as ToolSource).callTool({ name: call.name, arguments: call.arguments });
+        messages.push({ role: "tool", toolCallId: call.id, content: result.content });
+      }
+      used += completion.calls.length;
+    }
   }
 }
 
@@ -50,11 +60,16 @@ function requireText(content: string): string {
   return content;
 }
 
-function requireSingleCall(calls: readonly ToolCall[]): ToolCall {
-  if (calls.length !== MAX_TOOL_CALLS_PER_TURN) {
-    throw new AgentError("INVALID_TOOL_CALL_COUNT", { count: calls.length });
-  }
-  return calls[0];
+function requireExecutable(
+  calls: readonly ToolCall[],
+  tools: readonly ToolDefinition[],
+  used: number,
+  max: number,
+): void {
+  if (calls.length === 0) throw new AgentError("INVALID_TOOL_CALL_COUNT", { count: 0 });
+  if (used + calls.length > max) throw new AgentError("TOOL_CALL_LIMIT_EXCEEDED", { limit: max });
+  for (const call of calls) requireKnownTool(tools, call.name);
+  for (const call of calls) requireValidArguments(call);
 }
 
 function requireKnownTool(tools: readonly ToolDefinition[], name: string): void {

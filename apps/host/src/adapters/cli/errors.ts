@@ -26,13 +26,15 @@ export function describeError(error: unknown): string {
     case "MODEL_FAILURE":
       return error.data.status ? `API вернул HTTP ${error.data.status}.` : "Запрос к модели не выполнен.";
     case "INVALID_TOOL_CALL_COUNT":
-      return "Модель вернула некорректное число вызовов инструмента.";
+      return "Модель вернула ответ tool_calls без вызовов инструментов.";
     case "UNKNOWN_TOOL_CALL":
       return "Модель запросила неизвестный инструмент.";
     case "INVALID_TOOL_ARGUMENTS":
       return "Модель передала некорректные аргументы инструмента.";
     case "TOOL_CALL_LIMIT_EXCEEDED":
-      return "Модель повторно запросила инструмент после результата вызова.";
+      return typeof error.data.limit === "number"
+        ? `Модель превысила лимит вызовов инструментов за реплику (${error.data.limit}).`
+        : "Модель превысила лимит вызовов инструментов за реплику.";
   }
 }
 
@@ -62,23 +64,24 @@ function describeMcpError(error: McpDiscoveryError): string {
 }
 
 function describeMcpToolSourceError(error: McpToolSourceError): string {
+  const server = error.server;
   switch (error.code) {
     case "SERVER_START_FAILED":
-      return "Не удалось запустить MCP-сервер погоды.";
+      return `Не удалось запустить MCP-сервер «${server}».`;
     case "CONNECT_FAILED":
-      return "Не удалось установить соединение с MCP-сервером погоды.";
+      return `Не удалось установить соединение с MCP-сервером «${server}».`;
     case "TOOLS_UNSUPPORTED":
-      return "MCP-сервер погоды не объявил поддержку инструментов.";
+      return `MCP-сервер «${server}» не объявил поддержку инструментов.`;
     case "LIST_TOOLS_FAILED":
-      return "Не удалось получить список инструментов MCP-сервера погоды.";
+      return `Не удалось получить список инструментов MCP-сервера «${server}».`;
     case "CALL_TOOL_FAILED":
-      return "Не удалось выполнить вызов инструмента MCP-сервера погоды.";
+      return `Не удалось выполнить вызов инструмента MCP-сервера «${server}».`;
     case "UNSUPPORTED_TOOL_RESULT":
-      return "MCP-сервер погоды вернул неподдерживаемый формат результата.";
+      return `MCP-сервер «${server}» вернул неподдерживаемый формат результата.`;
     case "TIMEOUT":
-      return `Истёк таймаут MCP-сервера погоды на стадии ${error.stage ?? "неизвестно"}.`;
+      return `Истёк таймаут MCP-сервера «${server}» на стадии ${error.stage ?? "неизвестно"}.`;
     case "CLOSE_FAILED":
-      return "Не удалось корректно закрыть соединение с MCP-сервером погоды.";
+      return `Не удалось корректно закрыть соединение с MCP-сервером «${server}».`;
   }
 }
 

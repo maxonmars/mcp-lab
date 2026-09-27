@@ -33,7 +33,7 @@ describe("ежедневная сводка через Agent", () => {
       scheduled.model,
     );
     expect(created.code).toBe(0);
-    expect(created.out).toContain("MCP: schedule_daily_weather_summary — выполнено");
+    expect(created.out).toContain("MCP: scheduler › schedule_daily_weather_summary — выполнено");
 
     const pending = await readSchedulerSummary(serverConfig(), "Новосибирск");
     expect(pending.status).toBe("no_summary");

@@ -10,17 +10,19 @@ export type McpToolSourceErrorCode =
 
 export type McpToolSourceStage = "connect" | "listTools" | "callTool";
 
-export type McpToolSourceErrorData = Readonly<{ stage?: McpToolSourceStage }>;
+export type McpToolSourceErrorData = Readonly<{ server: string; stage?: McpToolSourceStage }>;
 
 export class McpToolSourceError extends Error {
   readonly code: McpToolSourceErrorCode;
+  readonly server: string;
   readonly stage: McpToolSourceStage | undefined;
   readonly data: McpToolSourceErrorData;
 
-  constructor(code: McpToolSourceErrorCode, data: McpToolSourceErrorData = {}) {
+  constructor(code: McpToolSourceErrorCode, data: McpToolSourceErrorData) {
     super(code);
     this.name = "McpToolSourceError";
     this.code = code;
+    this.server = data.server;
     this.stage = data.stage;
     this.data = data;
   }

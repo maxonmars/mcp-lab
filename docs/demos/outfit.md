@@ -20,9 +20,9 @@ npm run dev -- outfit Новосибирск
 Перед советом печатаются три строки статуса, после совета — путь файла:
 
 ```text
-MCP: get_current_weather — выполнено
-MCP: recommend_outfit — выполнено
-MCP: save_outfit_advice — выполнено
+MCP: open-meteo › get_current_weather — выполнено
+MCP: open-meteo › recommend_outfit — выполнено
+MCP: open-meteo › save_outfit_advice — выполнено
 
 ── Совет по одежде ──
 
@@ -62,7 +62,7 @@ npm run dev -- outfit Плюторандия
 ```
 
 ```text
-MCP: get_current_weather — ошибка
+MCP: open-meteo › get_current_weather — ошибка
 Ошибка · Шаг «погода и прогноз» не выполнен: Место не найдено сервисом геокодирования Open-Meteo.
 ```
 

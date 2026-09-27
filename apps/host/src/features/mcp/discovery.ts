@@ -1,12 +1,11 @@
 import { stat } from "node:fs/promises";
-import { createRequire } from "node:module";
 import { isAbsolute } from "node:path";
 import { Client, SdkError, SdkErrorCode } from "@modelcontextprotocol/client";
 import { StdioClientTransport } from "@modelcontextprotocol/client/stdio";
 import { McpDiscoveryError } from "./errors.ts";
+import { resolveFilesystemEntrypoint } from "./filesystemEntrypoint.ts";
 import type { FilesystemDiscoveryOptions, McpDiscoveryResult, McpToolSummary } from "./types.ts";
 
-const requireFromHost = createRequire(new URL("../../../package.json", import.meta.url));
 const serverStartCodes = new Set([
   "EACCES",
   "ENOENT",
@@ -31,7 +30,7 @@ async function verifyRoot(root: string): Promise<void> {
 async function resolveServerEntrypoint(): Promise<string> {
   let entrypoint: string;
   try {
-    entrypoint = requireFromHost.resolve("@modelcontextprotocol/server-filesystem/dist/index.js");
+    entrypoint = resolveFilesystemEntrypoint();
     if (!(await stat(entrypoint)).isFile()) throw new Error("Filesystem server entrypoint is not a file");
   } catch {
     throw new McpDiscoveryError("SERVER_START_FAILED");

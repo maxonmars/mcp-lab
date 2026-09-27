@@ -2,8 +2,9 @@
 
 ## Текущее приложение
 
-Исполняемый workspace `apps/host` и два самостоятельных MCP-сервера в `servers/*`: `open-meteo` и
-`scheduler`. Общих библиотек нет. Skills и материалы экспериментов — каталоги документов.
+Исполняемый workspace `apps/host` и четыре самостоятельных MCP-сервера в `servers/*`: `open-meteo`,
+`scheduler`, `npm-registry` и `github-releases`. Общих библиотек нет. Skills и материалы экспериментов —
+каталоги документов.
 
 `app/main.ts` принимает окружение, argv, путь Node и потоки; `app/compose.ts` собирает приложение.
 Модель создаётся лениво при первом ask, поэтому справка, настройки и discovery MCP доступны без ключа.
@@ -16,6 +17,7 @@ flowchart LR
     App --> MCP[features/mcp]
     App --> Sched[features/scheduler]
     App --> Outfit[features/outfit]
+    App --> Deps[features/dependencies]
     CLI --> Core
     LLM --> Core
     LLM --> DeepSeek[DeepSeek API]
@@ -30,16 +32,25 @@ flowchart LR
     Outfit --> Weather
     Weather -.outfit-режим.-> DeepSeek
     Weather -.outfit-режим.-> LatestMd[(.local/outfit/latest.md)]
+    Deps --> Filesystem
+    Deps --> Npm[npm-registry MCP process]
+    Deps --> Github[github-releases MCP process]
+    Npm --> NpmApi[npm registry API]
+    Github --> GithubApi[GitHub REST API]
+    Filesystem --> DependencyMd[(.local/reports/dependency-*.md)]
 ```
 
-Agent инкапсулирует ModelPort и текст системной инструкции. `respond(input, toolSource?)` проверяет
-непустой ввод, передаёт system + user и, если передан `toolSource`, список его инструментов первым
-запросом модели. Текстовый ответ модели возвращается сразу; `tool_calls`-ответ допускает ровно один
-вызов (`MAX_TOOL_CALLS_PER_TURN = 1`), после которого выполняется один добавочный запрос модели с
-результатом инструмента — второй `tool_calls`-ответ завершает turn ошибкой лимита. Диалог, usage и
-состояние между вызовами `respond()` не накапливаются. В ядре нет SDK, файлов, env, CLI-команд и
-пользовательских подсказок; `ToolSource`, `ToolDefinition`, `ToolCall` и `ToolResult` — provider- и
-MCP-нейтральные типы core.
+Agent инкапсулирует ModelPort, текст системной инструкции и `maxToolCalls` (`AgentOptions`, по умолчанию 1,
+ADR 0007). `respond(input, toolSource?)` проверяет непустой ввод, передаёт system + user и, если передан
+`toolSource`, список его инструментов первым запросом модели с `toolChoice: "auto"`, пока не исчерпан
+лимит. Текстовый ответ модели завершает turn. `tool_calls`-ответ проверяется целиком до исполнения (число
+вызовов не ноль, лимит не превышен, каждое имя известно, аргументы каждого — объект) и исполняется по
+порядку без параллелизма — источник инструментов делит один MCP-транспорт на сервер; после раунда цикл
+запрашивает модель снова с накопленными assistant/tool-сообщениями. Ответ `tool_calls` при исчерпанном
+лимите или пустой список вызовов завершают turn ошибкой. Диалог, usage и состояние между вызовами
+`respond()` не накапливаются — только внутри одного вызова, на время его раундов. В ядре нет SDK, файлов,
+env, CLI-команд и пользовательских подсказок; `ToolSource`, `ToolDefinition`, `ToolCall` и `ToolResult` —
+provider- и MCP-нейтральные типы core.
 
 DeepSeekModel отвечает за формат SDK, лимит ответа, таймаут и перевод ошибок в AgentError.
 `tools`/`tool_calls` core-контракта переводятся в OpenAI-совместимые `tools`/`tool_choice`/`tool_calls`;
@@ -51,8 +62,10 @@ HTTP-статус при наличии. Текущая модель по умо
 CLI получает реестр обработчиков и потоки, не создаёт агента и не знает SDK.
 Вывод оформляет один CliView из compose.ts: обработчики передают ему типизированные данные реестров,
 ответа и discovery, а цвет решает `styleText` отдельно для stdout и stderr. Перед финальным ответом
-`ask` CliView печатает строку `MCP: <имя инструмента> — выполнено`/`— ошибка` на каждый реальный MCP-вызов:
-одну для обычного инструмента, три для фасада совета по одежде; без tool call строк нет.
+`ask` CliView печатает строку `MCP: <сервер> › <имя инструмента> — выполнено`/`— ошибка` на каждый
+реальный MCP-вызов (метку сервера несёт `StdioToolSourceOptions.serverName`, ADR 0007): одну для обычного
+инструмента, три для фасада совета по одежде, до пяти для сценария проверки зависимости; без tool call
+строк нет.
 Текст из REPL становится вызовом ask; `/команда` и подкоманда CLI используют один dispatch.
 В REPL текст после /ask сохраняется буквально; quoting нужен только оболочке при однократном запуске.
 
@@ -67,10 +80,12 @@ legacy-инициализации (`2025-11-25`) проверяет capability t
 `mcp.timeoutMs` и собственные типизированные ошибки (`McpDiscoveryError` и `McpToolSourceError`);
 `withStdioToolSource` дополнительно принимает `env` дочернего процесса и таймауты вызова по имени инструмента.
 
-`ask` получает инструменты двух серверов сразу: `app/ask.ts` запускает сессию `open-meteo` в outfit-режиме и
-публичный режим `servers/scheduler` и объединяет их `ToolSource` в `app/toolSources.ts` — вызов направляется по
-имени инструмента, повторяющееся имя отклоняется, лимит одного tool call за реплику по-прежнему держит Agent.
-Обе сессии закрываются вместе, независимо от исхода. Строки `MCP: …` печатает наблюдатель над каждым серверным
+`ask` получает инструменты пяти серверов сразу (ADR 0007): `app/ask.ts` вложенно открывает сессии
+`open-meteo` в outfit-режиме, публичного режима `servers/scheduler`, Filesystem MCP (через проекцию
+`features/dependencies`), `servers/npm-registry` и `servers/github-releases` и объединяет их `ToolSource`
+в `app/toolSources.ts` — вызов направляется по имени инструмента, повторяющееся имя отклоняется. Лимит
+`ASK_MAX_TOOL_CALLS = 6` держит Agent. Все пять сессий закрываются вместе, независимо от исхода; каталог
+`.local/reports` создаётся до их открытия. Строки `MCP: …` печатает наблюдатель над каждым серверным
 источником, поэтому они соответствуют реальным MCP-вызовам.
 
 Фича `outfit` (ADR 0005) — пайплайн трёх инструментов одного сервера через одну сессию:
@@ -80,6 +95,14 @@ legacy-инициализации (`2025-11-25`) проверяет capability t
 напрямую. Для `ask` фича даёт проекцию источника Open‑Meteo: внутренние шаги скрыты, вместо них — фасад
 `prepare_outfit_advice`, который для Agent остаётся одним tool call. Ключ и параметры DeepSeek host передаёт
 серверу через `env`, путь файла — аргументом запуска; таймауты длинных шагов задаются по имени инструмента.
+
+Фича `dependencies` (ADR 0007) — проекция Filesystem MCP для сценария «проверь и сохрани отчёт о
+npm-зависимости host»: два фасада, `read_host_manifest` (без аргументов, путь host задаёт сам) и
+`save_dependency_report` (`packageName` + `markdown`, путь в `.local/reports` вычисляет host), скрывают
+сырые `read_text_file`/`write_file` и остальные инструменты Filesystem. Модель сама решает, вызывать ли
+`get_npm_package` (`servers/npm-registry`) и `list_github_releases`/`get_github_release`
+(`servers/github-releases`) между чтением манифеста и сохранением отчёта — host не навязывает порядок,
+только доступный набор инструментов и инструкцию в `prompts/dependencyTools.md`.
 
 Фича `scheduler` (ADR 0004, ADR 0006) — фоновая работа без реплики пользователя. `scheduler run` занимает терминал и
 запускает цикл worker в процессе host: `app/scheduler.ts` открывает два постоянных stdio-соединения (`open-meteo`
@@ -163,10 +186,11 @@ Dependency-cruiser, Biome, Vitest и TypeScript закреплены в package.
 ## Что ещё не реализовано
 
 Есть MCP discovery Filesystem-сервера по stdio, native tool calling собственных серверов (`get_current_weather`,
-`schedule_weather`, `schedule_daily_weather_summary`, `get_weather_summary`, `cancel_weather_schedule`;
-максимум один tool call за реплику) и планировщик погоды с worker в host и SQLite-состоянием в сервере
+`schedule_weather`, `schedule_daily_weather_summary`, `get_weather_summary`, `cancel_weather_schedule`,
+`get_npm_package`, `list_github_releases`, `get_github_release`; несколько раундов до настраиваемого лимита,
+ADR 0007) и планировщик погоды с worker в host и SQLite-состоянием в сервере
 планировщика. Постоянные сессии `ask`,
-несколько tool rounds, параллельные вызовы, общий агрегатор MCP-серверов с политиками и подтверждениями,
+параллельные вызовы, общий агрегатор MCP-серверов с политиками и подтверждениями,
 Streamable HTTP, история диалога, память, профили, трассировка, skills и runner экспериментов не
 реализованы. Планировщик работает, пока запущен процесс `scheduler run`: автозапуска (`launchd`, службы),
 переподключения к упавшему серверу и параллельных операций worker нет.

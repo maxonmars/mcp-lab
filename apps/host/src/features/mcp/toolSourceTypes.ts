@@ -1,6 +1,8 @@
 export type StdioToolSourceOptions = Readonly<{
   command: string;
   args: readonly string[];
+  /** Метка сервера для ошибок и строк MCP. */
+  serverName: string;
   /** Таймаут подключения, списка и вызовов без отдельного значения в callTimeoutsMs. */
   timeoutMs: number;
   /** Добавляется к безопасному набору переменных SDK; остальное окружение host не наследуется. */

@@ -58,7 +58,7 @@ describe("scheduler: терминалы A и B", () => {
   it("ask создаёт расписание, worker печатает сводку без реплики, summary и ask читают её без генерации", async () => {
     const { created, createdAt } = await createScheduleFromTerminalB();
     expect(created.code).toBe(0);
-    expect(created.out).toContain("MCP: schedule_weather — выполнено");
+    expect(created.out).toContain("MCP: scheduler › schedule_weather — выполнено");
     expect(created.out).toContain("Расписание создано.");
 
     const controller = new AbortController();
@@ -91,7 +91,7 @@ describe("scheduler: терминалы A и B", () => {
       { type: "text", content: "Вот сводка." },
     ]);
     const asked = await terminalB(["ask", "Что в последней сводке по Новосибирску?"], readAsk.model);
-    expect(asked.out).toContain("MCP: get_weather_summary — выполнено");
+    expect(asked.out).toContain("MCP: scheduler › get_weather_summary — выполнено");
     const toolMessage = readAsk.requests[1]?.messages.at(-1);
     expect(toolMessage).toMatchObject({ role: "tool", content: expect.stringContaining(MODEL_TEXT) });
     expect(summaryModel.requests).toHaveLength(1);

@@ -108,17 +108,17 @@ it("не показывает текст неизвестной ошибки", (
   expect(error.text).toBe("Ошибка · Не удалось выполнить операцию.\n");
 });
 
-it("строка статуса MCP называет фактически вызванный инструмент, без аргументов и результата", () => {
+it("строка статуса MCP называет сервер и фактически вызванный инструмент, без аргументов и результата", () => {
   const output = capture();
   const view = new CliView(output, capture());
-  view.mcpToolStatus("get_current_weather", true);
-  view.mcpToolStatus("schedule_weather", true);
-  view.mcpToolStatus("get_weather_summary", false);
+  view.mcpToolStatus("open-meteo", "get_current_weather", true);
+  view.mcpToolStatus("scheduler", "schedule_weather", true);
+  view.mcpToolStatus("scheduler", "get_weather_summary", false);
   expect(output.text).toBe(
     [
-      "MCP: get_current_weather — выполнено",
-      "MCP: schedule_weather — выполнено",
-      "MCP: get_weather_summary — ошибка",
+      "MCP: open-meteo › get_current_weather — выполнено",
+      "MCP: scheduler › schedule_weather — выполнено",
+      "MCP: scheduler › get_weather_summary — ошибка",
       "",
     ].join("\n"),
   );

@@ -1,12 +1,14 @@
 # mcp-lab
 
 Учебный host на TypeScript и Node 24: CLI-агент с native tool calling через собственные MCP-серверы
-(Open‑Meteo и планировщик погоды), фоновый worker планировщика и подключение к локальному Filesystem MCP.
-Агент отправляет системную инструкцию и текущую реплику в DeepSeek; между репликами история не сохраняется.
-DeepSeek сам решает вызвать MCP-инструмент (`get_current_weather`, `schedule_weather`,
-`schedule_daily_weather_summary`, `get_weather_summary`, `cancel_weather_schedule`) или фасад совета по одежде,
-не более одного вызова за реплику. Команда `outfit` выполняет цепочку из трёх MCP-инструментов
-Open‑Meteo и сохраняет совет в `.local/outfit/latest.md`.
+(Open‑Meteo, планировщик погоды, npm-registry и github-releases), фоновый worker планировщика и
+подключение к локальному Filesystem MCP. Агент отправляет системную инструкцию и текущую реплику в
+DeepSeek; между репликами история не сохраняется. В `ask` DeepSeek сам решает, какие MCP-инструменты
+вызвать и в каком порядке — `get_current_weather`, `schedule_weather`, `schedule_daily_weather_summary`,
+`get_weather_summary`, `cancel_weather_schedule`, фасад совета по одежде, чтение манифеста host,
+`get_npm_package`, `list_github_releases`, `get_github_release` и сохранение отчёта о зависимости — до
+шести раундов за реплику ([ADR 0007](docs/adr/0007-orchestration-mcp.md)). Команда `outfit` выполняет
+цепочку из трёх MCP-инструментов Open‑Meteo и сохраняет совет в `.local/outfit/latest.md`.
 
 ## Запуск
 
@@ -32,6 +34,7 @@ LAB_LLM_API_KEY=ваш-ключ
 npm run dev -- ask "Что такое MCP? Ответь кратко."
 npm run dev -- ask "Какая сейчас погода в Новосибирске?"
 npm run dev -- ask "Что надеть в Новосибирске, если выхожу на пару часов?"
+npm run dev -- ask "Проверь, стоит ли обновить Zod в apps/host/package.json, и сохрани короткий отчёт"
 npm run dev -- outfit Новосибирск
 npm run dev -- help
 npm run dev -- config show
@@ -42,9 +45,9 @@ npm run dev -- scheduler summary Новосибирск
 
 Справка, просмотр настроек, `mcp tools` и `scheduler summary` работают без ключа. `mcp tools` получает список от
 настоящего локального Filesystem-сервера, но не вызывает инструменты и не обращается к модели. `ask`, `outfit` и
-`scheduler run` требуют ключ: на каждый `ask` host запускает собственные Open‑Meteo и scheduler MCP-серверы по
-stdio и закрывает сессии после ответа; если DeepSeek решит вызвать инструмент, перед ответом печатается одна
-строка `MCP: <имя инструмента> — выполнено` (или `— ошибка`).
+`scheduler run` требуют ключ: каждый `ask` открывает до пяти MCP-сессий (Open‑Meteo, планировщик, Filesystem,
+npm-registry, github-releases) и закрывает их после ответа; на каждый реальный MCP-вызов DeepSeek перед ответом
+печатается строка `MCP: <сервер> › <имя инструмента> — выполнено` (или `— ошибка`).
 `npm run dev` и `npm start` читают корневой `.env`, если он существует. Переменная, переданная
 окружением процесса, имеет приоритет. Значение секрета не выводится в config show.
 
@@ -75,10 +78,24 @@ npm run dev -- scheduler summary Новосибирск   # без модели 
 npm run dev -- outfit Новосибирск
 ```
 
-Команда печатает три строки `MCP: get_current_weather`, `recommend_outfit`, `save_outfit_advice`, совет и путь
-`.local/outfit/latest.md`; повторный запуск заменяет файл. В `ask` та же цепочка доступна модели одним
-фасадом. Подробности — [ADR 0005](docs/adr/0005-outfit-pipeline.md), README [фичи](apps/host/src/features/outfit/README.md)
+Команда печатает три строки `MCP: open-meteo › get_current_weather`, `recommend_outfit`, `save_outfit_advice`,
+совет и путь `.local/outfit/latest.md`; повторный запуск заменяет файл. В `ask` та же цепочка доступна модели
+одним фасадом. Подробности — [ADR 0005](docs/adr/0005-outfit-pipeline.md), README [фичи](apps/host/src/features/outfit/README.md)
 и [демо](docs/demos/outfit.md).
+
+## Проверка обновления зависимости
+
+```sh
+npm run dev -- ask "Проверь, стоит ли обновить Zod в apps/host/package.json, и сохрани короткий отчёт"
+```
+
+Агент сам проходит цепочку из пяти MCP-вызовов через три сервера — читает манифест host через Filesystem
+MCP, узнаёт последнюю версию через `npm-registry`, находит подходящий релиз через `github-releases` и
+сохраняет отчёт обратно через Filesystem MCP — и печатает пять строк `MCP: <сервер> › <инструмент> —
+выполнено` перед ответом. Отчёт сохраняется в `.local/reports/dependency-<пакет>.md`. Подробности —
+[ADR 0007](docs/adr/0007-orchestration-mcp.md), README [фичи](apps/host/src/features/dependencies/README.md),
+[сервера npm-registry](servers/npm-registry/README.md), [сервера github-releases](servers/github-releases/README.md)
+и [демо](docs/demos/orchestration.md).
 
 ## Настройки
 
@@ -128,13 +145,17 @@ npm start -- mcp tools
 - [Планировщик с worker в host](docs/adr/0004-scheduler-worker.md)
 - [Пайплайн совета по одежде](docs/adr/0005-outfit-pipeline.md)
 - [Ежедневная сводка погоды через Agent](docs/adr/0006-daily-agent-weather-summary.md)
+- [Orchestration MCP: несколько раундов и серверов за одну реплику](docs/adr/0007-orchestration-mcp.md)
 - [Host](apps/host/README.md)
 - [Open‑Meteo MCP server](servers/open-meteo/README.md)
 - [Scheduler MCP server](servers/scheduler/README.md)
+- [npm-registry MCP server](servers/npm-registry/README.md)
+- [github-releases MCP server](servers/github-releases/README.md)
 - [Короткое демо](docs/demos/first-start.md)
 - [Демо списка MCP-инструментов](docs/demos/mcp-tools.md)
 - [Демо вызова Open‑Meteo MCP-инструмента](docs/demos/open-meteo-tool.md)
 - [Демо планировщика в двух терминалах](docs/demos/scheduler.md)
 - [Демо ежедневной сводки через Agent](docs/demos/scheduler-agent.md)
 - [Демо совета по одежде](docs/demos/outfit.md)
+- [Демо проверки обновления зависимости](docs/demos/orchestration.md)
 - [Направления курса](docs/course.md) — будущие задания, без реализации в текущем старте
