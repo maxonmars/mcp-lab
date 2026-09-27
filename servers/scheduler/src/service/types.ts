@@ -8,6 +8,12 @@ export type ServiceDeps = Readonly<{
 }>;
 
 export type NewSchedule = Readonly<{ city: string; collectEverySeconds: number; summaryEverySeconds: number }>;
+export type NewDailySchedule = Readonly<{
+  city: string;
+  collectEverySeconds: number;
+  summaryAtLocalTime: string;
+  timeZone: string;
+}>;
 export type SummaryQuery = Readonly<{ scheduleId?: string | undefined; city?: string | undefined }>;
 
 export type SummaryCandidate = Readonly<{ schedule: ScheduleRow; publishedAtMs: number | null }>;
@@ -20,7 +26,13 @@ export type SummaryLookup =
 
 export type CancelOutcome = Readonly<{ status: "cancelled" | "already_cancelled" | "not_found" }>;
 
-export type DueTask = Readonly<{ scheduleId: string; city: string; collectDue: boolean; summaryDue: boolean }>;
+export type DueTask = Readonly<{
+  scheduleId: string;
+  city: string;
+  collectDue: boolean;
+  summaryDue: boolean;
+  summaryMode?: "daily";
+}>;
 export type DueTasks = Readonly<{ tasks: readonly DueTask[]; nextDueAtMs: number | null }>;
 
 export type PollInput = Readonly<{ scheduleId: string; requestedAtMs: number; result: PollResult }>;

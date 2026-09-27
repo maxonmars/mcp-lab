@@ -87,7 +87,7 @@ describe("schedulerPort", () => {
       const answers: Record<string, unknown> = {
         worker_start: { status: "started" },
         worker_get_due: {
-          tasks: [{ scheduleId: "sch_1", city: "Омск", collectDue: true, summaryDue: false }],
+          tasks: [{ scheduleId: "sch_1", city: "Омск", collectDue: true, summaryDue: false, summaryMode: "daily" }],
           nextDueAtMs: 5,
         },
         worker_record_poll: { locationChanged: false },
@@ -101,7 +101,7 @@ describe("schedulerPort", () => {
     });
     const port = schedulerPort(scheduler.value);
     await port.start();
-    expect((await port.dueTasks(7)).tasks[0]?.city).toBe("Омск");
+    expect((await port.dueTasks(7)).tasks[0]).toMatchObject({ city: "Омск", summaryMode: "daily" });
     await port.recordPoll({ scheduleId: "sch_1", requestedAtMs: 1, result: { ok: false, error: "e" } });
     expect(await port.history("sch_1", 0, 9)).toHaveLength(1);
     const publish = {
@@ -250,6 +250,22 @@ describe("readSchedulerSummary", () => {
     expect(await readSchedulerSummary({ ...config, connect: async () => bare.value }, "Омск")).toEqual({
       status: "not_found",
       candidates: [],
+    });
+  });
+
+  it("список расписаний принимает ежедневное время вместо интервала сводки", async () => {
+    const daily = {
+      scheduleId: "sch_2",
+      city: "Новосибирск",
+      collectEverySeconds: 600,
+      summaryAtLocalTime: "18:00",
+      timeZone: "Asia/Novosibirsk",
+      scheduleStatus: "active",
+    };
+    const result = caller(() => structuredResult({ status: "ambiguous", candidates: [daily] }));
+    expect(await readSchedulerSummary({ ...config, connect: async () => result.value }, "Новосибирск")).toEqual({
+      status: "ambiguous",
+      candidates: [daily],
     });
   });
 

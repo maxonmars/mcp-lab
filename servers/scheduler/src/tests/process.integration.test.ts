@@ -78,7 +78,7 @@ describe("scheduler MCP-сервер как процесс", () => {
   it("согласование версии и список инструментов не создают базу; она открывается при первом вызове", async () => {
     harness = createHarness();
     const publicServer = await launch();
-    expect((await publicServer.client.listTools()).tools).toHaveLength(3);
+    expect((await publicServer.client.listTools()).tools).toHaveLength(4);
     expect(existsSync(harness.dbPath)).toBe(false);
     await call(publicServer, "schedule_weather", { city: "Омск", collectEverySeconds: 10, summaryEverySeconds: 60 });
     expect(existsSync(harness.dbPath)).toBe(true);

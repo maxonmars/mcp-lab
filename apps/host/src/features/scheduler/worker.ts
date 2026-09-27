@@ -1,4 +1,5 @@
-import type { ModelPort } from "../../core/index.ts";
+import type { Agent, ModelPort } from "../../core/index.ts";
+import { summarizeWithAgent } from "./agentSummary.ts";
 import type { Clock, DueTask, SchedulerPort, WeatherPort, WorkerEvents } from "./contracts.ts";
 import { summarize } from "./summarize.ts";
 
@@ -10,6 +11,7 @@ export type WorkerDeps = Readonly<{
   scheduler: SchedulerPort;
   weather: WeatherPort;
   model: ModelPort;
+  dailyAgent: Agent;
   clock: Clock;
   events: WorkerEvents;
   systemPrompt: string;
@@ -28,7 +30,10 @@ async function runDue(deps: WorkerDeps, tasks: readonly DueTask[], signal: Abort
     if (signal.aborted) return;
     if (task.collectDue) await collect(deps, task);
     if (signal.aborted) return;
-    if (task.summaryDue) await summarize(deps, task);
+    if (task.summaryDue) {
+      if (task.summaryMode === "daily") await summarizeWithAgent(deps, task);
+      else await summarize(deps, task);
+    }
   }
 }
 

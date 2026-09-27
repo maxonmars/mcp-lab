@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { type CliView, InputError } from "../adapters/cli/index.ts";
+import { Agent } from "../core/index.ts";
 import { resolveOpenMeteoEntrypoint } from "../features/mcp/index.ts";
 import {
   type Clock,
@@ -39,6 +40,10 @@ export type SchedulerHandlerOptions = Readonly<{
 
 function readSummaryPrompt(): string {
   return readFileSync(new URL("../features/scheduler/prompts/weatherSummary.md", import.meta.url), "utf8").trim();
+}
+
+function readAgentPrompt(): string {
+  return readFileSync(new URL("../features/scheduler/prompts/weatherAgent.md", import.meta.url), "utf8").trim();
 }
 
 function serverConfig(options: SchedulerHandlerOptions): SchedulerServerConfig {
@@ -111,6 +116,7 @@ export function createSchedulerHandlers(options: SchedulerHandlerOptions) {
           scheduler: session.scheduler,
           weather: session.weather,
           model,
+          dailyAgent: new Agent(model, readAgentPrompt()),
           clock: options.clock ?? systemClock,
           events: workerEvents(options.view, config.dbPath),
           systemPrompt: readSummaryPrompt(),

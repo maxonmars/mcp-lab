@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { Agent } from "../../../core/index.ts";
 import type { PollResult } from "../contracts.ts";
 import { runWorker } from "../worker.ts";
 import {
@@ -27,7 +28,10 @@ function setup(weather: FakeWeather, model: FakeModel) {
   const controller = new AbortController();
   const clock = new FakeClock(T0 + 20 * SECOND, T0 + 3600 * SECOND, () => controller.abort());
   const events = recordingEvents(scheduler.log);
-  const running = runWorker({ scheduler, weather, model, clock, events, systemPrompt: "SYSTEM" }, controller.signal);
+  const running = runWorker(
+    { scheduler, weather, model, dailyAgent: new Agent(model, "DAILY"), clock, events, systemPrompt: "SYSTEM" },
+    controller.signal,
+  );
   return { scheduler, controller, events, running };
 }
 
@@ -80,7 +84,10 @@ describe("worker: остановка по Ctrl+C", () => {
     controller.abort();
     const clock = new FakeClock(T0, T0 + 60 * SECOND, () => {});
     const events = recordingEvents(scheduler.log);
-    await runWorker({ scheduler, weather, model, clock, events, systemPrompt: "" }, controller.signal);
+    await runWorker(
+      { scheduler, weather, model, dailyAgent: new Agent(model, "DAILY"), clock, events, systemPrompt: "" },
+      controller.signal,
+    );
     expect(scheduler.log).toEqual(["start", "started", "stopped"]);
     expect(weather.cities).toEqual([]);
   });

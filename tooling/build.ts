@@ -9,7 +9,12 @@ import { files, localPath, workspacePaths } from "./files.ts";
 const WEATHER_SMOKE_TIMEOUT_MS = 5_000;
 const SCHEDULER_SMOKE_TIMEOUT_MS = 10_000;
 const OUTFIT_TOOLS = ["get_current_weather", "recommend_outfit", "save_outfit_advice"];
-const PUBLIC_SCHEDULER_TOOLS = ["cancel_weather_schedule", "get_weather_summary", "schedule_weather"];
+const PUBLIC_SCHEDULER_TOOLS = [
+  "cancel_weather_schedule",
+  "get_weather_summary",
+  "schedule_daily_weather_summary",
+  "schedule_weather",
+];
 
 /** Собранный сервер планировщика из другого каталога: список инструментов, запись в SQLite, режим worker. */
 async function schedulerSmoke(root: string): Promise<void> {

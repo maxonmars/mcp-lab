@@ -1,28 +1,39 @@
 import type { McpServer } from "@modelcontextprotocol/server";
 import { z } from "zod/v4";
+import { isValidLocalTime, isValidTimeZone } from "../service/dailyTime.ts";
 import { COLLECT_INTERVAL_LIMITS_SECONDS, SUMMARY_INTERVAL_LIMITS_SECONDS } from "../service/deadlines.ts";
 import type { SchedulerService } from "../service/service.ts";
 import { summaryReply } from "./summaryReply.ts";
 import { failure, guarded, isoTime, reply } from "./toolResult.ts";
 
 export const SCHEDULE_WEATHER_TOOL_NAME = "schedule_weather";
+export const SCHEDULE_DAILY_WEATHER_SUMMARY_TOOL_NAME = "schedule_daily_weather_summary";
 export const GET_WEATHER_SUMMARY_TOOL_NAME = "get_weather_summary";
 export const CANCEL_WEATHER_SCHEDULE_TOOL_NAME = "cancel_weather_schedule";
 
+const cityInput = z.string().trim().min(2).max(100).describe("Город и необязательная страна, например «Новосибирск».");
+const collectIntervalInput = z
+  .number()
+  .int()
+  .min(COLLECT_INTERVAL_LIMITS_SECONDS.min)
+  .max(COLLECT_INTERVAL_LIMITS_SECONDS.max)
+  .describe("Как часто опрашивать погоду, секунды.");
+
 const scheduleInput = z.object({
-  city: z.string().trim().min(2).max(100).describe("Город и необязательная страна, например «Новосибирск»."),
-  collectEverySeconds: z
-    .number()
-    .int()
-    .min(COLLECT_INTERVAL_LIMITS_SECONDS.min)
-    .max(COLLECT_INTERVAL_LIMITS_SECONDS.max)
-    .describe("Как часто опрашивать погоду, секунды."),
+  city: cityInput,
+  collectEverySeconds: collectIntervalInput,
   summaryEverySeconds: z
     .number()
     .int()
     .min(SUMMARY_INTERVAL_LIMITS_SECONDS.min)
     .max(SUMMARY_INTERVAL_LIMITS_SECONDS.max)
     .describe("Как часто публиковать сводку за последние 24 часа, секунды."),
+});
+const dailyScheduleInput = z.object({
+  city: cityInput,
+  collectEverySeconds: collectIntervalInput,
+  summaryAtLocalTime: z.string().refine(isValidLocalTime).describe("Время сводки в часовом поясе, HH:mm."),
+  timeZone: z.string().trim().min(1).refine(isValidTimeZone).describe("Часовой пояс IANA, например Asia/Novosibirsk."),
 });
 const scheduleOutput = z.object({
   scheduleId: z.string(),
@@ -32,9 +43,18 @@ const scheduleOutput = z.object({
   nextCollectAt: z.string(),
   nextSummaryAt: z.string(),
 });
+const dailyScheduleOutput = z.object({
+  scheduleId: z.string(),
+  city: z.string(),
+  collectEverySeconds: z.number(),
+  summaryAtLocalTime: z.string(),
+  timeZone: z.string(),
+  nextCollectAt: z.string(),
+  nextSummaryAt: z.string(),
+});
 
 const summaryInput = z.object({
-  scheduleId: z.string().trim().min(1).optional().describe("ID расписания из schedule_weather."),
+  scheduleId: z.string().trim().min(1).optional().describe("ID погодного расписания."),
   city: z.string().trim().min(1).optional().describe("Город, для которого создано расписание."),
 });
 const scheduleStatus = z.enum(["active", "cancelled"]);
@@ -52,7 +72,9 @@ const summaryOutput = z.object({
         scheduleId: z.string(),
         city: z.string(),
         collectEverySeconds: z.number(),
-        summaryEverySeconds: z.number(),
+        summaryEverySeconds: z.number().optional(),
+        summaryAtLocalTime: z.string().optional(),
+        timeZone: z.string().optional(),
         scheduleStatus,
         lastPublishedAt: z.string().optional(),
       }),
@@ -91,6 +113,41 @@ function registerScheduleTool(server: McpServer, service: SchedulerService): voi
           `- Город: ${row.city}`,
           `- Опрос: каждые ${row.collectEverySeconds} с, первый — ${data.nextCollectAt}`,
           `- Сводка: каждые ${row.summaryEverySeconds} с, первая — ${data.nextSummaryAt}`,
+          "Опросы и сводки выполняются, пока в терминале запущена команда `scheduler run`.",
+        ].join("\n");
+        return reply(text, data);
+      }),
+  );
+}
+
+function registerDailyScheduleTool(server: McpServer, service: SchedulerService): void {
+  server.registerTool(
+    SCHEDULE_DAILY_WEATHER_SUMMARY_TOOL_NAME,
+    {
+      description:
+        "Создаёт ежедневное расписание погоды: регулярно собирает наблюдения и в заданное местное время " +
+        "запускает сводку за последние 24 часа. Вход — город, интервал опроса, HH:mm и часовой пояс IANA.",
+      inputSchema: dailyScheduleInput,
+      outputSchema: dailyScheduleOutput,
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+    },
+    async (input) =>
+      guarded(() => {
+        const row = service.createDailySchedule(input);
+        const data = {
+          scheduleId: row.id,
+          city: row.city,
+          collectEverySeconds: row.collectEverySeconds,
+          summaryAtLocalTime: input.summaryAtLocalTime,
+          timeZone: input.timeZone,
+          nextCollectAt: isoTime(row.nextCollectAtMs),
+          nextSummaryAt: isoTime(row.nextSummaryAtMs),
+        };
+        const text = [
+          `Ежедневное расписание создано: ${row.id}`,
+          `- Город: ${row.city}`,
+          `- Опрос: каждые ${row.collectEverySeconds} с, первый — ${data.nextCollectAt}`,
+          `- Сводка: ежедневно в ${data.summaryAtLocalTime} (${data.timeZone}), первая — ${data.nextSummaryAt}`,
           "Опросы и сводки выполняются, пока в терминале запущена команда `scheduler run`.",
         ].join("\n");
         return reply(text, data);
@@ -145,6 +202,7 @@ function registerCancelTool(server: McpServer, service: SchedulerService): void 
 
 export function registerPublicTools(server: McpServer, service: SchedulerService): void {
   registerScheduleTool(server, service);
+  registerDailyScheduleTool(server, service);
   registerSummaryTool(server, service);
   registerCancelTool(server, service);
 }
