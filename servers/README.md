@@ -11,12 +11,17 @@ CLAUDE.md, src/index.ts, src/app/main.ts, tsconfig.build.json и собстве�
   публичные инструменты `schedule_weather`, `schedule_daily_weather_summary`, `get_weather_summary`,
   `cancel_weather_schedule` и отдельный режим
   `--worker` со служебными операциями (ADR 0004).
+- [`npm-registry`](npm-registry/README.md) — `get_npm_package`: последняя версия (dist-tag `latest`),
+  описание, лицензия, домашняя страница и репозиторий GitHub публичного npm registry (ADR 0007).
+- [`github-releases`](github-releases/README.md) — `list_github_releases` и `get_github_release`: список и
+  заметки релизов публичного GitHub REST API без токена, лимит 60 запросов в час на IP (ADR 0007).
 
-Host использует `open-meteo` в outfit-режиме и публичный режим `scheduler` как `ToolSource` на каждый `ask`,
-команда `outfit` — только `open-meteo` в outfit-режиме; в `scheduler run`
+Host использует `open-meteo` в outfit-режиме, публичный режим `scheduler`, современную Filesystem-сессию,
+`npm-registry` и `github-releases` как `ToolSource` на каждый `ask` (до пяти сессий, ADR 0007); команда
+`outfit` — только `open-meteo` в outfit-режиме; в `scheduler run`
 worker держит постоянные соединения с `open-meteo` в обычном режиме и `scheduler --worker`, а `scheduler summary` читает
-публичный режим. Внешний пакет Filesystem MCP — дочерний процесс discovery. Новые серверы добавляются по
-отдельному заданию.
+публичный режим. Внешний пакет Filesystem MCP — дочерний процесс discovery (`mcp tools`, legacy-режим) и
+современной сессии `ask` (через `features/dependencies`). Новые серверы добавляются по отдельному заданию.
 
 Серверы не импортируют host и друг друга; host не импортирует исходники серверов. Для тестов
 используются подменённые API и транспорт — реальные внешние API только в ручных демо.

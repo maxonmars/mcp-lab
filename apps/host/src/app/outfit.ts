@@ -10,6 +10,7 @@ import {
 } from "../features/outfit/index.ts";
 import type { ResolvedConfig } from "./config.ts";
 import { requireApiKey } from "./model.ts";
+import { SERVER_NAMES } from "./serverEntrypoints.ts";
 
 export type WithToolSource = (
   options: StdioToolSourceOptions,
@@ -17,16 +18,16 @@ export type WithToolSource = (
 ) => Promise<string>;
 
 /** Строка `MCP: …` на каждый реальный вызов MCP-инструмента этого источника. */
-export function observedToolSource(source: ToolSource, view: CliView): ToolSource {
+export function observedToolSource(source: ToolSource, view: CliView, serverName: string): ToolSource {
   return {
     listTools: () => source.listTools(),
     callTool: async (invocation) => {
       try {
         const result = await source.callTool(invocation);
-        view.mcpToolStatus(invocation.name, !result.isError);
+        view.mcpToolStatus(serverName, invocation.name, !result.isError);
         return result;
       } catch (error) {
-        view.mcpToolStatus(invocation.name, false);
+        view.mcpToolStatus(serverName, invocation.name, false);
         throw error;
       }
     },
@@ -44,6 +45,7 @@ export function openMeteoOptions(cwd: string, nodeExecutable: string, config: Re
     nodeExecutable,
     entrypoint: resolveOpenMeteoEntrypoint(import.meta.url),
     reportFile: outfitReportPath(cwd),
+    serverName: SERVER_NAMES.openMeteo,
     mcpTimeoutMs: values["mcp.timeoutMs"],
     llm: {
       apiKey: requireApiKey(config),
@@ -70,7 +72,10 @@ export function createOutfitHandler(
     const location = requireOutfitLocation(city);
     const serverOptions = openMeteoOptions(options.cwd, options.nodeExecutable, options.getConfig());
     const markdown = await options.withWeatherToolSource(serverOptions, async (source) => {
-      const result = await runOutfitPipeline(observedToolSource(source, options.view), location);
+      const result = await runOutfitPipeline(
+        observedToolSource(source, options.view, SERVER_NAMES.openMeteo),
+        location,
+      );
       return result.markdown;
     });
     return { markdown, path: outfitReportPath(options.cwd) };

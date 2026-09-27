@@ -19,6 +19,7 @@ import type {
 import { createAskHandler, type WithToolSource } from "./ask.ts";
 import { createCommands } from "./commands.ts";
 import { parseOptions, type ResolvedConfig, resolveConfig, showConfig } from "./config.ts";
+import type { CreateModel } from "./model.ts";
 import { createOutfitHandler } from "./outfit.ts";
 import { createSchedulerHandlers, type Interrupt } from "./scheduler.ts";
 
@@ -38,6 +39,9 @@ export type RunOptions = Readonly<{
   discoverFilesystemTools?: (options: FilesystemDiscoveryOptions) => Promise<McpDiscoveryResult>;
   withWeatherToolSource?: WithToolSource;
   withSchedulerToolSource?: WithToolSource;
+  withFilesystemToolSource?: WithToolSource;
+  withNpmToolSource?: WithToolSource;
+  withGithubToolSource?: WithToolSource;
   openWorkerSession?: (config: WorkerSessionConfig) => Promise<WorkerSession>;
   readSchedulerSummary?: (
     config: SchedulerServerConfig & Readonly<{ connect?: Connect | undefined }>,
@@ -45,11 +49,13 @@ export type RunOptions = Readonly<{
   ) => Promise<SummaryReadResult>;
 }>;
 
-export async function run(options: RunOptions): Promise<number> {
-  let config: ResolvedConfig;
-  const view = new CliView(options.terminal.output, options.terminal.error);
-  const createModel = options.createModel ?? ((settings: DeepSeekOptions) => new DeepSeekModel(settings));
-  const getConfig = () => config;
+/** ask и outfit используют один и тот же Open‑Meteo источник; ask дополнительно открывает ещё четыре сессии. */
+function createAskAndOutfit(
+  options: RunOptions,
+  createModel: CreateModel,
+  view: CliView,
+  getConfig: () => ResolvedConfig,
+) {
   const weatherHandlerOptions = {
     cwd: options.cwd,
     nodeExecutable: options.nodeExecutable,
@@ -61,8 +67,19 @@ export async function run(options: RunOptions): Promise<number> {
     ...weatherHandlerOptions,
     createModel,
     withSchedulerToolSource: options.withSchedulerToolSource ?? withStdioToolSource,
+    withFilesystemToolSource: options.withFilesystemToolSource ?? withStdioToolSource,
+    withNpmToolSource: options.withNpmToolSource ?? withStdioToolSource,
+    withGithubToolSource: options.withGithubToolSource ?? withStdioToolSource,
   });
-  const outfit = createOutfitHandler(weatherHandlerOptions);
+  return { ask, outfit: createOutfitHandler(weatherHandlerOptions) };
+}
+
+export async function run(options: RunOptions): Promise<number> {
+  let config: ResolvedConfig;
+  const view = new CliView(options.terminal.output, options.terminal.error);
+  const createModel = options.createModel ?? ((settings: DeepSeekOptions) => new DeepSeekModel(settings));
+  const getConfig = () => config;
+  const { ask, outfit } = createAskAndOutfit(options, createModel, view, getConfig);
   const scheduler = createSchedulerHandlers({
     cwd: options.cwd,
     nodeExecutable: options.nodeExecutable,

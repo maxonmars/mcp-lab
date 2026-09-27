@@ -13,6 +13,7 @@ export type OutfitServerConfig = Readonly<{
   /** Абсолютный путь к точке входа `servers/open-meteo`. */
   entrypoint: string;
   reportFile: string;
+  serverName: string;
   mcpTimeoutMs: number;
   llm: OutfitLlmConfig;
 }>;
@@ -23,6 +24,7 @@ export function outfitServerOptions(config: OutfitServerConfig) {
   return {
     command: config.nodeExecutable,
     args: [config.entrypoint, "--outfit-report-file", config.reportFile],
+    serverName: config.serverName,
     timeoutMs: mcpTimeoutMs,
     env: {
       LAB_LLM_API_KEY: llm.apiKey,

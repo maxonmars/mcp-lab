@@ -25,20 +25,35 @@ it("переводит собственные ошибки MCP без текст
 });
 
 it("переводит новые коды Agent для tool calling", () => {
-  expect(describeError(new AgentError("INVALID_TOOL_CALL_COUNT"))).toContain("некорректное число");
+  expect(describeError(new AgentError("INVALID_TOOL_CALL_COUNT"))).toContain("без вызовов инструментов");
   expect(describeError(new AgentError("UNKNOWN_TOOL_CALL"))).toContain("неизвестный инструмент");
   expect(describeError(new AgentError("INVALID_TOOL_ARGUMENTS"))).toContain("некорректные аргументы");
-  expect(describeError(new AgentError("TOOL_CALL_LIMIT_EXCEEDED"))).toContain("повторно запросила");
+  expect(describeError(new AgentError("TOOL_CALL_LIMIT_EXCEEDED", { limit: 6 }))).toBe(
+    "Модель превысила лимит вызовов инструментов за реплику (6).",
+  );
+  expect(describeError(new AgentError("TOOL_CALL_LIMIT_EXCEEDED"))).toBe(
+    "Модель превысила лимит вызовов инструментов за реплику.",
+  );
 });
 
-it("переводит ошибки McpToolSourceError без утечки stage-нейтральных случаев", () => {
-  expect(describeError(new McpToolSourceError("SERVER_START_FAILED"))).toContain("сервер погоды");
-  expect(describeError(new McpToolSourceError("TOOLS_UNSUPPORTED"))).toContain("не объявил");
-  expect(describeError(new McpToolSourceError("LIST_TOOLS_FAILED"))).toContain("список инструментов");
-  expect(describeError(new McpToolSourceError("CALL_TOOL_FAILED"))).toContain("вызов инструмента");
-  expect(describeError(new McpToolSourceError("UNSUPPORTED_TOOL_RESULT"))).toContain("неподдерживаемый формат");
-  expect(describeError(new McpToolSourceError("TIMEOUT", { stage: "callTool" }))).toContain("callTool");
-  expect(describeError(new McpToolSourceError("CLOSE_FAILED"))).toContain("закрыть соединение");
+it("переводит ошибки McpToolSourceError без утечки stage-нейтральных случаев, называя сервер", () => {
+  expect(describeError(new McpToolSourceError("SERVER_START_FAILED", { server: "open-meteo" }))).toContain(
+    "«open-meteo»",
+  );
+  expect(describeError(new McpToolSourceError("TOOLS_UNSUPPORTED", { server: "open-meteo" }))).toContain("не объявил");
+  expect(describeError(new McpToolSourceError("LIST_TOOLS_FAILED", { server: "open-meteo" }))).toContain(
+    "список инструментов",
+  );
+  expect(describeError(new McpToolSourceError("CALL_TOOL_FAILED", { server: "open-meteo" }))).toContain(
+    "вызов инструмента",
+  );
+  expect(describeError(new McpToolSourceError("UNSUPPORTED_TOOL_RESULT", { server: "open-meteo" }))).toContain(
+    "неподдерживаемый формат",
+  );
+  expect(describeError(new McpToolSourceError("TIMEOUT", { server: "open-meteo", stage: "callTool" }))).toContain(
+    "«open-meteo» на стадии callTool",
+  );
+  expect(describeError(new McpToolSourceError("CLOSE_FAILED", { server: "npm-registry" }))).toContain("«npm-registry»");
 });
 
 it("переводит ошибки планировщика: отказ второго worker и отдельные формулировки для серверов", () => {

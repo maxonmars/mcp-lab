@@ -100,7 +100,10 @@ function resetSdk(): void {
 }
 
 function run<T>(use: (source: ToolSource) => Promise<T>, timeoutMs = 23, extra: Partial<StdioToolSourceOptions> = {}) {
-  return withStdioToolSource({ command: "node-for-test", args: ["entry.js"], timeoutMs, ...extra }, use);
+  return withStdioToolSource(
+    { command: "node-for-test", args: ["entry.js"], serverName: "test-server", timeoutMs, ...extra },
+    use,
+  );
 }
 
 async function expectError(
@@ -108,7 +111,8 @@ async function expectError(
   code: McpToolSourceError["code"],
   stage?: string,
 ): Promise<void> {
-  await expect(operation).rejects.toMatchObject(stage === undefined ? { code } : { code, stage });
+  const expected = { code, server: "test-server", ...(stage === undefined ? {} : { stage }) };
+  await expect(operation).rejects.toMatchObject(expected);
 }
 
 describe("withStdioToolSource", () => {

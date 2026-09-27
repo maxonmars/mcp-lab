@@ -17,17 +17,22 @@ function createClient(): Client {
   return new Client({ name: "mcp-lab-host", version: "0.1.0" }, { versionNegotiation: { mode: "auto" } });
 }
 
-async function connect(client: Client, transport: StdioClientTransport, timeoutMs: number): Promise<void> {
+async function connect(
+  client: Client,
+  transport: StdioClientTransport,
+  timeoutMs: number,
+  serverName: string,
+): Promise<void> {
   try {
     await client.connect(transport, { timeout: timeoutMs });
   } catch (error) {
-    if (isRequestTimeout(error)) throw new McpToolSourceError("TIMEOUT", { stage: "connect" });
-    if (hasServerStartCode(error)) throw new McpToolSourceError("SERVER_START_FAILED");
-    throw new McpToolSourceError("CONNECT_FAILED");
+    if (isRequestTimeout(error)) throw new McpToolSourceError("TIMEOUT", { server: serverName, stage: "connect" });
+    if (hasServerStartCode(error)) throw new McpToolSourceError("SERVER_START_FAILED", { server: serverName });
+    throw new McpToolSourceError("CONNECT_FAILED", { server: serverName });
   }
 }
 
-async function listTools(client: Client, timeoutMs: number): Promise<readonly ToolDefinition[]> {
+async function listTools(client: Client, timeoutMs: number, serverName: string): Promise<readonly ToolDefinition[]> {
   try {
     const result = await client.listTools(undefined, { timeout: timeoutMs });
     return result.tools.map((tool) => ({
@@ -36,8 +41,8 @@ async function listTools(client: Client, timeoutMs: number): Promise<readonly To
       inputSchema: (tool.inputSchema ?? {}) as ToolDefinition["inputSchema"],
     }));
   } catch (error) {
-    if (isRequestTimeout(error)) throw new McpToolSourceError("TIMEOUT", { stage: "listTools" });
-    throw new McpToolSourceError("LIST_TOOLS_FAILED");
+    if (isRequestTimeout(error)) throw new McpToolSourceError("TIMEOUT", { server: serverName, stage: "listTools" });
+    throw new McpToolSourceError("LIST_TOOLS_FAILED", { server: serverName });
   }
 }
 
@@ -50,25 +55,30 @@ function isTextBlock(value: unknown): value is { type: "text"; text: string } {
   );
 }
 
-function extractText(content: readonly unknown[]): string {
-  if (content.length === 0) throw new McpToolSourceError("UNSUPPORTED_TOOL_RESULT");
+function extractText(content: readonly unknown[], serverName: string): string {
+  if (content.length === 0) throw new McpToolSourceError("UNSUPPORTED_TOOL_RESULT", { server: serverName });
   const texts: string[] = [];
   for (const block of content) {
-    if (!isTextBlock(block)) throw new McpToolSourceError("UNSUPPORTED_TOOL_RESULT");
+    if (!isTextBlock(block)) throw new McpToolSourceError("UNSUPPORTED_TOOL_RESULT", { server: serverName });
     texts.push(block.text);
   }
   return texts.join("\n");
 }
 
-async function callTool(client: Client, invocation: ToolInvocation, timeoutMs: number): Promise<ToolResult> {
+async function callTool(
+  client: Client,
+  invocation: ToolInvocation,
+  timeoutMs: number,
+  serverName: string,
+): Promise<ToolResult> {
   let result: Awaited<ReturnType<Client["callTool"]>>;
   try {
     result = await client.callTool({ name: invocation.name, arguments: invocation.arguments }, { timeout: timeoutMs });
   } catch (error) {
-    if (isRequestTimeout(error)) throw new McpToolSourceError("TIMEOUT", { stage: "callTool" });
-    throw new McpToolSourceError("CALL_TOOL_FAILED");
+    if (isRequestTimeout(error)) throw new McpToolSourceError("TIMEOUT", { server: serverName, stage: "callTool" });
+    throw new McpToolSourceError("CALL_TOOL_FAILED", { server: serverName });
   }
-  return { content: extractText(result.content), isError: result.isError === true };
+  return { content: extractText(result.content, serverName), isError: result.isError === true };
 }
 
 function callTimeout(options: StdioToolSourceOptions, name: string): number {
@@ -93,6 +103,7 @@ export async function withStdioToolSource<T>(
   options: StdioToolSourceOptions,
   use: (source: ToolSource) => Promise<T>,
 ): Promise<T> {
+  const serverName = options.serverName;
   let transport: StdioClientTransport;
   try {
     transport = new StdioClientTransport({
@@ -102,18 +113,20 @@ export async function withStdioToolSource<T>(
       ...(options.env ? { env: { ...options.env } } : {}),
     });
   } catch {
-    throw new McpToolSourceError("SERVER_START_FAILED");
+    throw new McpToolSourceError("SERVER_START_FAILED", { server: serverName });
   }
   const client = createClient();
   let result: T | undefined;
   let failed = false;
   let failure: unknown;
   try {
-    await connect(client, transport, options.timeoutMs);
-    if (!client.getServerCapabilities()?.tools) throw new McpToolSourceError("TOOLS_UNSUPPORTED");
+    await connect(client, transport, options.timeoutMs, serverName);
+    if (!client.getServerCapabilities()?.tools) {
+      throw new McpToolSourceError("TOOLS_UNSUPPORTED", { server: serverName });
+    }
     const source: ToolSource = {
-      listTools: () => listTools(client, options.timeoutMs),
-      callTool: (invocation) => callTool(client, invocation, callTimeout(options, invocation.name)),
+      listTools: () => listTools(client, options.timeoutMs, serverName),
+      callTool: (invocation) => callTool(client, invocation, callTimeout(options, invocation.name), serverName),
     };
     result = await use(source);
   } catch (error) {
@@ -125,7 +138,7 @@ export async function withStdioToolSource<T>(
     } catch {
       if (!failed) {
         failed = true;
-        failure = new McpToolSourceError("CLOSE_FAILED");
+        failure = new McpToolSourceError("CLOSE_FAILED", { server: serverName });
       }
     }
   }

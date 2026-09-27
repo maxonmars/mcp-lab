@@ -124,7 +124,7 @@ describe("Agent выполняет ровно один tool call", () => {
     expect(source.callTool).not.toHaveBeenCalled();
   });
 
-  it("отклоняет несколько tool calls в одном ответе", async () => {
+  it("отклоняет несколько tool calls в одном ответе при лимите по умолчанию", async () => {
     const complete = vi.fn().mockResolvedValue({
       type: "tool_calls",
       calls: [
@@ -134,7 +134,8 @@ describe("Agent выполняет ровно один tool call", () => {
     } satisfies ModelCompletion);
     const source = fakeSource();
     await expect(new Agent({ complete }, "").respond("Вопрос", source)).rejects.toMatchObject({
-      code: "INVALID_TOOL_CALL_COUNT",
+      code: "TOOL_CALL_LIMIT_EXCEEDED",
+      data: { limit: 1 },
     });
     expect(source.callTool).not.toHaveBeenCalled();
   });

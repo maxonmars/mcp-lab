@@ -1,9 +1,11 @@
 # Фичи host
 
-`mcp/` получает список инструментов установленного Filesystem MCP и запускает Open‑Meteo MCP как
+`mcp/` получает список инструментов установленного Filesystem MCP и запускает stdio MCP-серверы как
 `ToolSource` для tool calling. `scheduler/` — worker планировщика погоды: цикл опроса и публикации сводок,
 показатели за 24 часа и типизированный MCP-адаптер к серверу планировщика. `outfit/` — пайплайн совета по
-одежде из трёх инструментов Open‑Meteo и фасад для Agent. Новые фичи добавляются только по заданию.
+одежде из трёх инструментов Open‑Meteo и фасад для Agent. `dependencies/` — проекция Filesystem MCP с двумя
+фасадами (`read_host_manifest`, `save_dependency_report`) для проверки обновления npm-зависимости host
+через `npm-registry` и `github-releases` (ADR 0007). Новые фичи добавляются только по заданию.
 
 Каталог `<name>/` содержит `index.ts`, `README.md`, `tests/*.test.ts`.
 Инструкции модели при необходимости находятся в `prompts/*.md`.

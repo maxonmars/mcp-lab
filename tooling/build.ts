@@ -8,6 +8,7 @@ import { files, localPath, workspacePaths } from "./files.ts";
 
 const WEATHER_SMOKE_TIMEOUT_MS = 5_000;
 const SCHEDULER_SMOKE_TIMEOUT_MS = 10_000;
+const TOOL_LIST_SMOKE_TIMEOUT_MS = 5_000;
 const OUTFIT_TOOLS = ["get_current_weather", "recommend_outfit", "save_outfit_advice"];
 const PUBLIC_SCHEDULER_TOOLS = [
   "cancel_weather_schedule",
@@ -81,6 +82,24 @@ async function outfitSmoke(root: string, cwd: string): Promise<void> {
   }
 }
 
+/** Собранный сервер без сети: сверяет отсортированный listTools с ожидаемым набором инструментов. */
+async function toolListSmoke(root: string, relativeEntry: string, expectedTools: readonly string[]): Promise<void> {
+  const client = new Client({ name: "build-smoke", version: "0.0.0" }, { versionNegotiation: { mode: "auto" } });
+  const transport = new StdioClientTransport({
+    command: process.execPath,
+    args: [join(root, relativeEntry)],
+    stderr: "ignore",
+  });
+  await client.connect(transport, { timeout: TOOL_LIST_SMOKE_TIMEOUT_MS });
+  try {
+    const listed = (await client.listTools()).tools.map((tool) => tool.name).sort();
+    const expected = [...expectedTools].sort();
+    if (listed.join() !== expected.join()) throw new Error(`${relativeEntry} smoke: неверный список инструментов.`);
+  } finally {
+    await client.close();
+  }
+}
+
 const root = resolve(".");
 for (const workspace of workspacePaths(root)) {
   rmSync(join(workspace, "dist"), { recursive: true, force: true });
@@ -137,3 +156,9 @@ try {
 
 await schedulerSmoke(root);
 console.log("Запуск собранного Scheduler MCP server из другого каталога: OK.");
+
+await toolListSmoke(root, "servers/npm-registry/dist/app/main.js", ["get_npm_package"]);
+console.log("Запуск собранного npm-registry MCP server из другого каталога: OK.");
+
+await toolListSmoke(root, "servers/github-releases/dist/app/main.js", ["get_github_release", "list_github_releases"]);
+console.log("Запуск собранного github-releases MCP server из другого каталога: OK.");

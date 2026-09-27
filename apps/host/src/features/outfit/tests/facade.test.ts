@@ -123,12 +123,14 @@ describe("outfitServerOptions", () => {
         nodeExecutable: "node",
         entrypoint: "/srv/main.ts",
         reportFile: "/work/.local/outfit/latest.md",
+        serverName: "open-meteo",
         mcpTimeoutMs: 10_000,
         llm,
       }),
     ).toEqual({
       command: "node",
       args: ["/srv/main.ts", "--outfit-report-file", "/work/.local/outfit/latest.md"],
+      serverName: "open-meteo",
       timeoutMs: 10_000,
       env: {
         LAB_LLM_API_KEY: "key",

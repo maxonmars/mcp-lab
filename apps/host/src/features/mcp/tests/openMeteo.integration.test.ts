@@ -47,6 +47,7 @@ describe("Open-Meteo MCP по stdio", () => {
       {
         command: process.execPath,
         args: [resolveOpenMeteoEntrypoint(import.meta.url)],
+        serverName: "open-meteo",
         timeoutMs: 10_000,
       },
       (source) => source.listTools(),
@@ -68,6 +69,7 @@ describe("Open-Meteo MCP по stdio", () => {
         {
           command: process.execPath,
           args: [resolveOpenMeteoEntrypoint(import.meta.url), "--outfit-report-file", reportFile],
+          serverName: "open-meteo",
           timeoutMs: 10_000,
           env: {
             LAB_LLM_API_KEY: "test-key",
@@ -95,6 +97,7 @@ describe("Open-Meteo MCP по stdio", () => {
         {
           command: process.execPath,
           args: [resolveOpenMeteoEntrypoint(import.meta.url), "--outfit-report-file", join(tmpdir(), "latest.md")],
+          serverName: "open-meteo",
           timeoutMs: 10_000,
         },
         (source) => source.listTools(),

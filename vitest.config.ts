@@ -6,7 +6,13 @@ export default defineConfig({
     testTimeout: 20000,
     coverage: {
       provider: "v8",
-      include: ["apps/host/src/**/*.ts", "servers/open-meteo/src/**/*.ts", "servers/scheduler/src/**/*.ts"],
+      include: [
+        "apps/host/src/**/*.ts",
+        "servers/open-meteo/src/**/*.ts",
+        "servers/scheduler/src/**/*.ts",
+        "servers/npm-registry/src/**/*.ts",
+        "servers/github-releases/src/**/*.ts",
+      ],
       exclude: ["**/tests/**", "**/app/main.ts"],
       reporter: ["text", "html"],
     },

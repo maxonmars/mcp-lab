@@ -111,6 +111,14 @@ export const emptyWeatherToolSource = {
   callTool: async () => ({ content: "погода", isError: false }),
 };
 
+/** Filesystem/npm-registry/github-releases в terminalB не объявляют инструментов, чтобы не дублировать имена. */
+const emptyToolSource = {
+  listTools: async () => [],
+  callTool: async () => {
+    throw new Error("callTool не должен вызываться без объявленных инструментов");
+  },
+};
+
 export function serverConfig(): SchedulerServerConfig {
   return {
     nodeExecutable: process.execPath,
@@ -137,6 +145,9 @@ export async function terminalB(
     terminal: io.io,
     createModel,
     withWeatherToolSource: (_options, use) => use(emptyWeatherToolSource),
+    withFilesystemToolSource: (_options, use) => use(emptyToolSource),
+    withNpmToolSource: (_options, use) => use(emptyToolSource),
+    withGithubToolSource: (_options, use) => use(emptyToolSource),
   });
   return { code, out: io.out(), err: io.err(), createModel };
 }

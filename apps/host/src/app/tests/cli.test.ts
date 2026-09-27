@@ -71,6 +71,9 @@ async function invoke(argv: string[], opts: InvokeOptions = {}) {
     discoverFilesystemTools: opts.discoverFilesystemTools,
     withWeatherToolSource: opts.withWeatherToolSource ?? defaultWithWeatherToolSource,
     withSchedulerToolSource: defaultWithWeatherToolSource,
+    withFilesystemToolSource: defaultWithWeatherToolSource,
+    withNpmToolSource: defaultWithWeatherToolSource,
+    withGithubToolSource: defaultWithWeatherToolSource,
     terminal: {
       input: Readable.from([opts.input ?? ""]),
       interactive: opts.terminal?.interactive ?? false,
@@ -303,7 +306,7 @@ describe("ask и Open-Meteo MCP tool calling", () => {
     expect(callTool).toHaveBeenCalledWith({ name: "get_current_weather", arguments: { location: "Новосибирск" } });
     expect(withWeatherToolSource).toHaveBeenCalledOnce();
     expect(sessions).toEqual(["open", "close"]);
-    const statusIndex = result.output.indexOf("MCP: get_current_weather — выполнено");
+    const statusIndex = result.output.indexOf("MCP: open-meteo › get_current_weather — выполнено");
     const answerIndex = result.output.indexOf("В Новосибирске ясно, 12°C.");
     expect(statusIndex).toBeGreaterThanOrEqual(0);
     expect(statusIndex).toBeLessThan(answerIndex);
@@ -324,7 +327,7 @@ describe("ask и Open-Meteo MCP tool calling", () => {
       })
       .mockResolvedValueOnce({ type: "text", content: "Не удалось получить данные о погоде." });
     const result = await invoke(["ask", "Погода в Незнакогороде?"], { complete, withWeatherToolSource });
-    const statusIndex = result.output.indexOf("MCP: get_current_weather — ошибка");
+    const statusIndex = result.output.indexOf("MCP: open-meteo › get_current_weather — ошибка");
     const answerIndex = result.output.indexOf("Не удалось получить данные о погоде.");
     expect(statusIndex).toBeGreaterThanOrEqual(0);
     expect(statusIndex).toBeLessThan(answerIndex);
@@ -356,11 +359,11 @@ describe("ask и Open-Meteo MCP tool calling", () => {
   it("REPL продолжает работу после ошибки weather MCP-сессии", async () => {
     const withWeatherToolSource = vi
       .fn<WeatherToolSourceFn>()
-      .mockRejectedValueOnce(new McpToolSourceError("CONNECT_FAILED"))
+      .mockRejectedValueOnce(new McpToolSourceError("CONNECT_FAILED", { server: "open-meteo" }))
       .mockImplementationOnce(defaultWithWeatherToolSource);
     const result = await invoke([], { input: "Первый\nВторой\n/exit\n", withWeatherToolSource });
     expect(result.code).toBe(1);
-    expect(result.error).toContain("MCP-сервером погоды");
+    expect(result.error).toContain("MCP-сервером «open-meteo»");
     expect(result.output).toContain("Ответ: Второй");
     expect(withWeatherToolSource).toHaveBeenCalledTimes(2);
   });

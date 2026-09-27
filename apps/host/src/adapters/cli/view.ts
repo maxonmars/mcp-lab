@@ -73,9 +73,9 @@ export class CliView {
   }
 
   /** Одна служебная строка перед финальным ответом; аргументы и содержимое результата не печатаются. */
-  mcpToolStatus(toolName: string, succeeded: boolean): void {
+  mcpToolStatus(serverName: string, toolName: string, succeeded: boolean): void {
     const outcome = succeeded ? "выполнено" : "ошибка";
-    this.#output.write(`${this.#paint("muted", `MCP: ${toolName} — ${outcome}`)}\n`);
+    this.#output.write(`${this.#paint("muted", `MCP: ${serverName} › ${toolName} — ${outcome}`)}\n`);
   }
 
   outfitAdvice(markdown: string, path: string): void {

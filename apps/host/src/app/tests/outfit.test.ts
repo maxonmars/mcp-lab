@@ -50,6 +50,15 @@ const schedulerSource: ToolSource = {
   callTool: async () => ({ content: "", isError: true }),
 };
 
+const emptyToolSource: ToolSource = {
+  listTools: async () => [],
+  callTool: async () => {
+    throw new Error("callTool не должен вызываться без объявленных инструментов");
+  },
+};
+const withEmptySource = (_options: StdioToolSourceOptions, use: (source: ToolSource) => Promise<string>) =>
+  use(emptyToolSource);
+
 type InvokeOptions = Readonly<{
   input?: string;
   authenticated?: boolean;
@@ -78,6 +87,9 @@ async function invoke(argv: string[], opts: InvokeOptions = {}) {
     createModel,
     withWeatherToolSource: weather.withWeatherToolSource,
     withSchedulerToolSource: (_options, use) => use(schedulerSource),
+    withFilesystemToolSource: withEmptySource,
+    withNpmToolSource: withEmptySource,
+    withGithubToolSource: withEmptySource,
     terminal: {
       input: Readable.from([opts.input ?? ""]),
       interactive: false,
@@ -107,14 +119,16 @@ describe("команда outfit", () => {
       { name: "save_outfit_advice", arguments: { markdown: ADVICE } },
     ]);
     expect(statuses(cli.output)).toEqual([
-      "MCP: get_current_weather — выполнено",
-      "MCP: recommend_outfit — выполнено",
-      "MCP: save_outfit_advice — выполнено",
+      "MCP: open-meteo › get_current_weather — выполнено",
+      "MCP: open-meteo › recommend_outfit — выполнено",
+      "MCP: open-meteo › save_outfit_advice — выполнено",
     ]);
     const reportFile = join(root, ".local/outfit/latest.md");
     expect(cli.output).toContain("── Совет по одежде ──\n\n# Что надеть сейчас\n\nТёплая куртка и зонт.\n");
     expect(cli.output).toContain(`Сохранено: ${reportFile}`);
-    expect(cli.output.indexOf("MCP: save_outfit_advice")).toBeLessThan(cli.output.indexOf("── Совет по одежде ──"));
+    expect(cli.output.indexOf("MCP: open-meteo › save_outfit_advice")).toBeLessThan(
+      cli.output.indexOf("── Совет по одежде ──"),
+    );
     expect(cli.createModel).not.toHaveBeenCalled();
   });
 
@@ -137,16 +151,21 @@ describe("команда outfit", () => {
     const result = await invoke(["outfit", "Атлантида"], { weather });
     expect(result.code).toBe(1);
     expect(result.error).toBe("Ошибка · Шаг «погода и прогноз» не выполнен: Место не найдено.\n");
-    expect(statuses(result.output)).toEqual(["MCP: get_current_weather — ошибка"]);
+    expect(statuses(result.output)).toEqual(["MCP: open-meteo › get_current_weather — ошибка"]);
     expect(weather.callTool).toHaveBeenCalledOnce();
   });
 
   it("ошибка транспорта называет шаг и причину MCP", async () => {
-    const weather = weatherServer({ recommend_outfit: new McpToolSourceError("TIMEOUT", { stage: "callTool" }) });
+    const weather = weatherServer({
+      recommend_outfit: new McpToolSourceError("TIMEOUT", { server: "open-meteo", stage: "callTool" }),
+    });
     const result = await invoke(["outfit", "Омск"], { weather });
     expect(result.code).toBe(1);
-    expect(result.error).toContain("Шаг «совет по одежде» не выполнен: Истёк таймаут MCP-сервера погоды");
-    expect(statuses(result.output)).toEqual(["MCP: get_current_weather — выполнено", "MCP: recommend_outfit — ошибка"]);
+    expect(result.error).toContain("Шаг «совет по одежде» не выполнен: Истёк таймаут MCP-сервера «open-meteo»");
+    expect(statuses(result.output)).toEqual([
+      "MCP: open-meteo › get_current_weather — выполнено",
+      "MCP: open-meteo › recommend_outfit — ошибка",
+    ]);
   });
 
   it.each([
@@ -191,9 +210,9 @@ describe("ask и фасад prepare_outfit_advice", () => {
     expect(first.messages[0]?.content).toContain("посоветовать одежду");
     expect(result.weather.withWeatherToolSource).toHaveBeenCalledOnce();
     expect(statuses(result.output)).toEqual([
-      "MCP: get_current_weather — выполнено",
-      "MCP: recommend_outfit — выполнено",
-      "MCP: save_outfit_advice — выполнено",
+      "MCP: open-meteo › get_current_weather — выполнено",
+      "MCP: open-meteo › recommend_outfit — выполнено",
+      "MCP: open-meteo › save_outfit_advice — выполнено",
     ]);
     expect(result.output).not.toContain("prepare_outfit_advice");
     const toolMessage = complete.mock.calls[1]?.[0].messages.at(-1);
@@ -212,7 +231,10 @@ describe("ask и фасад prepare_outfit_advice", () => {
     const toolMessage = complete.mock.calls[1]?.[0].messages.at(-1);
     expect(toolMessage?.content).toBe("Шаг «совет по одежде» не выполнен: Модель DeepSeek вернула пустой ответ.");
     expect(weather.callTool).toHaveBeenCalledTimes(2);
-    expect(statuses(result.output)).toEqual(["MCP: get_current_weather — выполнено", "MCP: recommend_outfit — ошибка"]);
+    expect(statuses(result.output)).toEqual([
+      "MCP: open-meteo › get_current_weather — выполнено",
+      "MCP: open-meteo › recommend_outfit — ошибка",
+    ]);
   });
 
   it("прямой вопрос о погоде вызывает get_current_weather без пайплайна", async () => {
@@ -224,7 +246,7 @@ describe("ask и фасад prepare_outfit_advice", () => {
       })
       .mockResolvedValueOnce({ type: "text", content: "В Омске 5°C." });
     const result = await invoke(["ask", "Какая погода в Омске?"], { complete });
-    expect(statuses(result.output)).toEqual(["MCP: get_current_weather — выполнено"]);
+    expect(statuses(result.output)).toEqual(["MCP: open-meteo › get_current_weather — выполнено"]);
     expect(result.weather.callTool).toHaveBeenCalledWith({
       name: "get_current_weather",
       arguments: { location: "Омск" },
